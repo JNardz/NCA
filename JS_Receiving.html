@@ -1,351 +1,189 @@
-<style>
-    /* --- GLOBAL LAYOUT --- */
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; margin:0; overflow: hidden; }
-    
-    /* Header */
-    header { 
-        background: #61C642; /* ACCENT */
-        color: white; 
-        padding: 0 20px; 
-        height: 50px; 
-        display: flex; justify-content: space-between; align-items: center; 
-        position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; 
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+<script>
+/* ==================================================
+   RECEIVING LOGIC
+   ================================================== */
+const LOT_CONFIG = {
+    "Heavy Machinery": {
+      ymm: true, vin: true, color: false, title: false, desc: false,
+      photos: ["Front", "Tag/Serial", "Hour Meter"],
+      tasks: []
+    },
+    "Vehicle": {
+      ymm: true, vin: true, color: true, title: true, desc: false,
+      photos: ["Front Corner", "VIN Tag", "Odometer"],
+      tasks: []
+    },
+    "Serialized Item": {
+      ymm: false, vin: true, color: false, title: false, desc: true,
+      photos: ["Overall", "Serial Number", "Detail"],
+      tasks: []
+    },
+    "Other": {
+      ymm: false, vin: false, color: false, title: false, desc: true,
+      photos: ["Overall", "Detail 1", "Detail 2"],
+      tasks: ["Catalog Photos"]
     }
-    
-    .brand-logo {
-        max-height: 45px; 
-        width: auto; 
-        display: block; 
-        object-fit: contain;
-    }
+};
 
-    /* Breadcrumbs */
-    #breadcrumb-bar {
-        background: #e0e0e0; color: #333; height: 40px; width: 100%; 
-        position: fixed; top: 50px; left: 0; z-index: 990; 
-        display: flex; align-items: center; padding: 0 20px; 
-        font-size: 0.9rem; border-bottom: 1px solid #ccc; 
-        white-space: nowrap; overflow-x: auto;
-    }
-    .crumb-item { color: #61C642; cursor: pointer; font-weight: 600; }
-    .crumb-item:hover { text-decoration: underline; }
-    .crumb-separator { margin: 0 8px; color: #777; }
-    .crumb-current { color: #555; font-weight: bold; cursor: default; }
+let ALL_CONSIGNORS = []; 
+let CART_ITEMS = []; 
+let LAST_INTAKE_DATA = null;
+let LAST_RECEIPT_SHEET = null;
+let activeSlot = 0;
 
-    /* Main Content */
-    main { 
-        flex: 1; position: relative; display: flex; flex-direction: column; 
-        margin-top: 90px; /* Header + Breadcrumbs */
-        height: calc(100vh - 90px); 
-        overflow: hidden; 
-        padding-bottom: 60px; /* Space for Bottom Banner */
-    }
+function openReceiving() { 
+  openApp('view-receiving'); 
+  resetIntakeFormState(); 
+  loadAuctionSelect(); 
+  google.script.run.withSuccessHandler(json => ALL_CONSIGNORS = JSON.parse(json)).getAllConsignors(); 
+}
 
-    /* FULL SCREEN VIEW (For Login) */
-    .full-screen-view {
-        position: fixed;
-        top: 0; left: 0;
-        width: 100vw; height: 100vh;
-        background-color: #f0f2f5;
-        z-index: 5000; /* High z-index to sit on top of dashboard */
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    /* CUSTOM ACCENT CLASSES */
-    .w3-custom-accent { background-color: #61C642 !important; color: white !important; }
-    .w3-text-custom-accent { color: #61C642 !important; }
-
-    /* DASHBOARD */
-    #view-dashboard { width: 100%; height: 100%; overflow-y: auto; padding: 40px; }
-    .dash-container { max-width: 1200px; margin: 0 auto; }
-    .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 25px; margin-top: 20px; }
-    
-    /* Desktop Override */
-    @media (min-width: 768px) { 
-        .app-grid { grid-template-columns: repeat(auto-fill, 160px); justify-content: start; } 
-        .dash-container { margin: 0; text-align: left; width: 70%; } 
-    }
-
-    .tile { background: white; aspect-ratio: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: 0.2s; color: #444; font-weight: 600; }
-    .tile:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.15); color: #61C642; }
-    .tile i { font-size: 2.5rem; margin-bottom: 10px; color: #555; }
-
-    /* APP VIEWS */
-    .app-view { display: none; height: 100%; flex-direction: column; }
-    .app-nav-bar { background: white; padding: 0 15px; border-bottom: 1px solid #ddd; height: 50px; display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
-    .nav-tab.active { background: #eafbea; color: #3b8e22; font-weight: bold; border-radius:4px; padding:8px 15px; border:none; }
-    .flex-container { display: flex; height: 100%; overflow: hidden; width: 100%; }
-    
-    /* SIDEBAR & LIST AREA */
-    .sidebar { width: 300px; background: white; border-right: 1px solid #ddd; padding: 20px; padding-bottom: 70px; overflow-y: auto; z-index: 10; transition: margin-left 0.3s ease; flex-shrink: 0; height: 100%; }
-    .sidebar.closed { margin-left: -300px; }
-    
-    .list-area { flex: 1; background: #f0f2f5; overflow-y: auto; width: 100%; min-width: 0; position: relative; display: flex; flex-direction: column; }
-    
-    .sticky-search-bar {
-        position: sticky;
-        top: 0;
-        z-index: 5;
-        background: #f0f2f5;
-        padding: 15px 20px;
-        border-bottom: 1px solid #ddd;
-        display: flex;
-        gap: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    
-    .list-content {
-        padding: 20px;
-        padding-bottom: 80px; 
-        flex: 1;
-    }
-
-    /* CARDS */
-    .list-card { display: flex; background: white; border-radius: 12px; padding: 12px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; border-left: 5px solid transparent; align-items: center; width: 100%; box-sizing: border-box; }
-    .list-card:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-left-color: #61C642; }
-    .card-thumb { width: 80px; height: 80px; background-color: #eee; border-radius: 8px; margin-right: 20px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-    .card-thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .card-info { flex: 1; min-width: 0; }
-    .card-badge { font-weight: bold; color: #1a252f; font-size: 0.9rem; margin-bottom: 4px; display: inline-block; background: #eef1f5; padding: 2px 8px; border-radius: 4px; }
-    .card-title { font-size: 1.1rem; color: #333; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-    /* DETAIL OVERLAY */
-    .detail-overlay { 
-        position: fixed; 
-        top: 90px; 
-        left: 0; 
-        width: 100%; 
-        height: calc(100vh - 90px); 
-        background: #f0f2f5; 
-        z-index: 20; 
-        display: none; 
-        padding: 20px; 
-        box-sizing: border-box; 
-    }
-    .detail-left { width: 320px; display: flex; flex-direction: column; margin-right: 20px; padding-bottom: 70px; }
-    .detail-right { flex: 1; background: white; border-radius: 12px; padding: 30px; overflow-y: auto; position: relative; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding-bottom: 70px; }
-    .id-header { background: #2c3e50; color: white; padding: 20px; border-radius: 12px 12px 0 0; text-align: center; }
-    .img-area { background: white; height: 300px; display: flex; justify-content: center; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 0px; overflow: hidden; }
-    .img-area img { width: 100%; height: 100%; object-fit: cover; }
-    .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; padding-bottom: 10px; }
-    .field-lbl { font-size: 0.75rem; text-transform: uppercase; color: #888; letter-spacing: 0.5px; margin-bottom: 4px; display: block; }
-    .field-val { border-bottom: 1px solid #eee; padding-bottom: 5px; min-height: 24px; font-weight: 500; }
-    .field-inp { width: 100%; padding: 5px; display: none; border: 1px solid #61C642; border-radius: 4px; }
-    .editing .field-val { display: none; }
-    .editing .field-inp { display: block; }
-    
-    /* STICKY BOTTOM BAR (FOR DETAIL VIEWS) */
-    .bottom-banner { 
-        position: fixed; bottom: 0; left: 0; width: 100%; 
-        background: white; padding: 10px 20px; 
-        border-top: 1px solid #ccc; 
-        display: flex; justify-content: space-between; align-items: center; 
-        z-index: 1100; box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-        height: 60px;
-        box-sizing: border-box;
-    }
-
-    /* MAIN VIEW FOOTER */
-    .main-view-footer {
-        position: fixed; bottom: 0; left: 0; width: 100%;
-        background: white; padding: 10px 20px;
-        border-top: 1px solid #ccc;
-        display: flex; justify-content: flex-end; align-items: center; 
-        z-index: 15; 
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-        height: 60px;
-        box-sizing: border-box;
-    }
-    
-    /* CHAT STYLES */
-    .chat-box { 
-        position: fixed; bottom: 60px; left: 20px;
-        width: 350px; height: 500px; 
-        background: white; border: 1px solid #ccc; border-radius: 8px 8px 0 0; 
-        display: none; flex-direction: column; 
-        box-shadow: 0 -5px 20px rgba(0,0,0,0.15); 
-        z-index: 1090; overflow:hidden;
-    }
-    .chat-header { padding: 15px; font-weight: bold; display: flex; justify-content: space-between; }
-    .chat-msgs { flex: 1; overflow-y: auto; padding: 15px; background: #fff; display: flex; flex-direction: column; gap: 15px; }
-    .chat-input-area { padding: 10px; border-top: 1px solid #ddd; background: #f9f9f9; display: flex; gap: 10px; }
-    .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
-    
-    .note-row { width: 100%; border-bottom: 1px solid #f0f0f0; padding-bottom: 10px; }
-    .note-meta { font-size: 0.75rem; color: #999; margin-bottom: 4px; font-weight: 600; display: flex; justify-content: space-between; }
-    .note-text { font-size: 0.95rem; color: #333; line-height: 1.4; white-space: pre-wrap; }
-    .system-note { color: #d35400; font-family: 'Courier New', monospace; font-size: 0.85rem; font-weight: bold; }
-
-    /* LOADING & ERROR */
-    .loading-indicator { text-align: center; padding: 50px; display: none; }
-    .error-msg { text-align: center; padding: 50px; display: none; color: red; }
-    .fa-spin { margin-bottom: 15px; font-size: 3rem; color: #ccc; }
-
-    /* TABS */
-    .tab-bar { border-bottom: 1px solid #ddd; margin-bottom: 20px; display: flex; gap: 20px; }
-    .tab-btn { background: none; border: none; padding: 10px 0; cursor: pointer; color: #666; border-bottom: 2px solid transparent; font-weight: 600; }
-    .tab-btn.active { color: #61C642; border-bottom-color: #61C642; }
-    .con-tab-content { display: none; }
-    .con-tab-content.active { display: block; animation: fadein 0.3s; }
-    @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
-
-    /* INTAKE STYLES */
-    #view-receiving { overflow-y: auto; padding: 20px; padding-bottom: 80px; background: #eef1f5; }
-    .form-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); max-width: 900px; margin: 0 auto; min-height: 500px; display:flex; flex-direction:column; }
-    .intake-step { display: none; animation: fadein 0.3s; flex: 1; }
-    .intake-step.active { display: block; }
-    #consignor-results { max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-top: none; display: none; margin-top: 10px; border-radius: 4px; }
-    .result-row { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; background: #fff; }
-    .result-row:hover { background: #eafbea; }
-    #intake-form-box { border: 2px solid transparent; transition: background-color 0.3s, border-color 0.3s; }
-    .cart-item { border: 1px solid #ddd; padding: 10px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; background: #fafafa; transition: 0.2s; }
-    .cart-item:hover { background: #eafbea; }
-    .cart-actions { display: flex; gap: 10px; }
-    .cart-edit { color: #61C642; cursor: pointer; }
-    .editing-mode-box { background-color: #fff8e1 !important; border-color: #ff9800 !important; }
-    .editing-item-highlight { border-color: #61C642 !important; background-color: #eafbea !important; box-shadow: 0 2px 8px rgba(97, 198, 66, 0.25); }
-    .img-upload-grid { display: flex; gap: 15px; margin-bottom: 15px; }
-    .img-square { width: 100px; height: 100px; border: 2px dashed #ccc; border-radius: 8px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; position: relative; overflow: hidden; background: #fafafa; text-align: center; color: #888; font-size: 0.8rem; }
-    .img-square:hover { border-color: #61C642; color: #61C642; }
-    .img-square.loading::after { content: "\f110"; font-family: "Font Awesome 6 Free"; font-weight: 900; animation: spin 1s linear infinite; font-size: 1.5rem; color: #61C642; }
-    .img-square img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; }
-    .receipt-box { border: 2px dashed #ccc; padding: 20px; background: #fafafa; margin-top: 20px; }
-    .success-banner { background-color: #dff0d8; color: #3c763d; padding: 15px; border-radius: 4px; text-align: center; margin-bottom: 20px; border: 1px solid #d6e9c6; }
-
-    /* LOGIN CARD & OVERLAY */
-    .login-card {
-      background: white; padding: 40px; border-radius: 12px; 
-      box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
-      width: 90%; max-width: 400px;
-    }
-
-    /* CUSTOM MODAL OVERLAY */
-    #custom-modal-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.5); z-index: 6000; /* Highest z-index */
-        display: none; justify-content: center; align-items: center;
-    }
-    
-    .custom-modal {
-        background: white; width: 90%; max-width: 400px;
-        border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        overflow: hidden; animation: modalPop 0.2s ease-out;
-    }
-    
-    @keyframes modalPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    
-    .modal-header {
-        background: #f8f9fa; padding: 15px 20px; border-bottom: 1px solid #eee;
-        font-weight: bold; color: #2c3e50; font-size: 1.1rem;
-    }
-    
-    .modal-body { padding: 20px; font-size: 1rem; color: #444; line-height: 1.5; }
-    
-    .modal-footer {
-        padding: 15px 20px; display: flex; justify-content: flex-end; gap: 10px;
-        border-top: 1px solid #eee; background: #fff;
-    }
-    
-    .modal-btn {
-        padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; border: none; font-size: 0.9rem;
-    }
-    .btn-cancel { background: #e0e0e0; color: #333; }
-    .btn-cancel:hover { background: #d0d0d0; }
-    
-    .btn-confirm { background: #61C642; color: white; }
-    .btn-confirm:hover { background: #51b532; }
-
-    /* SCANNER OVERLAY STYLE */
-    #scanner-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); z-index: 6000; /* Highest z-index */
-        display: none; justify-content: center; align-items: center;
-    }
-
-    /* GALLERY OVERLAY */
-    #image-gallery-overlay {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.9); z-index: 7000;
-        display: none; flex-direction: column; justify-content: center; align-items: center;
-    }
-    .gallery-content { position: relative; max-width: 90%; max-height: 80%; }
-    #gallery-main-img { max-width: 100%; max-height: 80vh; border-radius: 4px; box-shadow: 0 5px 30px rgba(0,0,0,0.5); }
-    .gallery-close { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; z-index: 7002; }
-    .gallery-prev, .gallery-next { cursor: pointer; position: absolute; top: 50%; width: auto; padding: 16px; margin-top: -50px; color: white; font-weight: bold; font-size: 20px; transition: 0.6s ease; border-radius: 0 3px 3px 0; user-select: none; z-index: 7001; background: rgba(0,0,0,0.3); }
-    .gallery-next { right: 0; border-radius: 3px 0 0 3px; }
-    .gallery-prev { left: 0; border-radius: 3px 0 0 3px; }
-    .gallery-prev:hover, .gallery-next:hover { background-color: rgba(0,0,0,0.8); }
-    .gallery-toolbar { position: absolute; bottom: 20px; width: 100%; text-align: center; }
-
-    /* MOBILE ADJUSTMENTS */
-    @media (max-width: 768px) {
-        #view-dashboard { padding: 15px !important; } 
-        
-        .app-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
+function loadAuctionSelect() {
+    const sel = document.getElementById('in_target_auction');
+    sel.innerHTML = "<option value='' disabled>Loading...</option>";
+    google.script.run.withSuccessHandler(json => {
+        const auctions = JSON.parse(json);
+        const openAuctions = auctions.filter(a => String(a.status).toLowerCase() === 'open' || String(a.status).toLowerCase() === 'active');
+        sel.innerHTML = "<option value='' disabled selected>Select Auction...</option>";
+        openAuctions.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.name} (${a.id})</option>`; });
+        if(CURRENT_USER && CURRENT_USER.lastAuction) {
+            const exists = openAuctions.find(a => String(a.id) === String(CURRENT_USER.lastAuction));
+            if(exists) { sel.value = CURRENT_USER.lastAuction; }
         }
+        sel.onchange = function() {
+            if(CURRENT_USER) {
+               CURRENT_USER.lastAuction = this.value; 
+               google.script.run.updateUserAuctionPref(CURRENT_USER.username, this.value); 
+            }
+        };
+    }).getAllAuctions();
+}
 
-        .sidebar { position: absolute; height: 100%; box-shadow: 2px 0 10px rgba(0,0,0,0.2); }
-        
-        /* FIX FOR CUT OFF CONTENT: Make overlay fixed and cover header */
-        .detail-overlay {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 2000 !important; /* Above Header (1000) */
-            padding: 0 !important;
-            overflow-y: auto; /* Enable scrolling on the overlay itself */
-            display: flex; /* Ensure flex behavior */
-            flex-direction: column; /* Stack children vertically */
-        }
-        
-        /* ADJUST CONTENT CONTAINER SCROLLING */
-        .detail-right {
-            width: 100%;
-            height: auto; /* Allow content to dictate height */
-            flex: 1 1 auto; /* Grow and shrink as needed */
-            overflow-y: visible; /* Let overlay handle scrolling */
-            padding: 20px;
-            padding-bottom: 80px;
-            box-shadow: none;
-            margin-bottom: 0;
-            border-radius: 0;
-        }
+function resetIntakeFormState() {
+  document.getElementById('in_cid').value = ""; 
+  document.getElementById('in_search').value = ""; 
+  document.getElementById('in_phone_hidden').value = ""; 
+  document.getElementById('in_addr_hidden').value = ""; 
+  document.getElementById('consignor-results').style.display = 'none';
+  document.getElementById('consignor-display-card').style.display = 'none';
+  CART_ITEMS = []; 
+  renderCart(); 
+  clearCartForm(); 
+  goToStep1(); 
+}
 
-        .detail-left { width: 100%; margin: 0; flex: 0 0 auto; }
-        .id-header, .img-area { border-radius: 0; }
-        .img-area { height: 250px; margin-bottom: 0; border-bottom: 1px solid #ddd; }
-        .data-grid { grid-template-columns: 1fr; gap: 10px; }
-        
-        .app-view { margin-top: 0; }
-        
-        #view-users { flex-direction: column; }
-        #view-users > div { flex-direction: column; }
+function goToStep1() { switchStep('rx-step-1'); updateBreadcrumbs([{name: "Receiving", func: "openReceiving()"}, {name: "Identify Consignor", func: null}]); }
+function goToStep2() { switchStep('rx-step-2'); document.getElementById('summ-con-name').innerText = `Consignor: ${document.getElementById('in_selected_name').value}`; updateBreadcrumbs([{name: "Receiving", func: "openReceiving()"}, {name: "Identify Consignor", func: "goToStep1()"}, {name: "Build Inventory", func: null}]); }
+function switchStep(stepId) { document.querySelectorAll('.intake-step').forEach(el => el.classList.remove('active')); document.getElementById(stepId).classList.add('active'); }
 
-        .bottom-banner {
-            z-index: 2100 !important; /* Above overlay */
-        }
+function filterConsignors() { 
+    const inputVal = document.getElementById('in_search').value.toLowerCase(); 
+    const isNumber = /^\d+$/.test(inputVal);
+    if (inputVal.length < 2 && !isNumber) { document.getElementById('consignor-results').style.display = 'none'; return; } 
+    const matches = ALL_CONSIGNORS.filter(c => {
+        const term = inputVal;
+        const termDigits = term.replace(/\D/g, '');
+        const phoneMatch = (termDigits.length > 0) && String(c.phone).replace(/\D/g,'').includes(termDigits);
+        return (String(c.id).includes(term) || String(c.name).toLowerCase().includes(term) || String(c.business || "").toLowerCase().includes(term) || phoneMatch || String(c.email || "").toLowerCase().includes(term) || String(c.address).toLowerCase().includes(term));
+    });
+    renderConsignors(matches); 
+}
 
-        /* MOBILE CHAT OVERLAY */
-        .chat-box {
-           position: fixed; top: auto; bottom: 0; left: 0; right: 0; 
-           width: 100% !important; height: 60vh !important;
-           border-radius: 12px 12px 0 0; 
-           box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
-           z-index: 2200 !important; 
-        }
-    }
-    @media print { 
-        header, #breadcrumb-bar, .app-nav-bar, .no-print, .success-banner { display: none !important; } 
-        #view-receiving { display: block !important; background: white; padding:0; } 
-        .form-card { box-shadow: none; padding: 0; } 
-        .receipt-box { border: 1px solid #000; background: white; } 
-        main { margin-top: 0; height: auto; overflow: visible; } 
-    }
-</style>
+function renderConsignors(list) { 
+    const container = document.getElementById('consignor-results'); 
+    container.innerHTML = ""; 
+    if(list.length === 0) { container.style.display = 'none'; return; } 
+    container.style.display = 'block'; 
+    list.forEach(c => { 
+        const div = document.createElement('div'); div.className = "result-row"; div.onclick = () => { selectConsignor(c); }; 
+        const bizDisplay = c.business ? `<br><small class="w3-text-blue-grey"><i class="fa fa-briefcase"></i> ${c.business}</small>` : "";
+        div.innerHTML = `<div class="result-main">${c.name} <span class="w3-tag w3-tiny w3-text-custom-accent">#${c.id}</span>${bizDisplay}</div><div class="result-sub">${c.phone} | ${c.address}</div>`; 
+        container.appendChild(div); 
+    }); 
+}
+
+function selectConsignor(c) { 
+    document.getElementById('in_cid').value = c.id; 
+    document.getElementById('in_selected_name').value = c.name; 
+    document.getElementById('in_phone_hidden').value = c.phone; 
+    document.getElementById('in_addr_hidden').value = c.address; 
+    document.getElementById('disp_c_id').innerText = "#" + c.id;
+    document.getElementById('disp_c_name').innerText = c.name;
+    document.getElementById('disp_c_biz').innerText = c.business || "N/A";
+    document.getElementById('disp_c_phone').innerText = c.phone;
+    document.getElementById('disp_c_addr').innerText = c.address;
+    document.getElementById('consignor-results').style.display = 'none'; 
+    document.getElementById('in_search').value = ""; 
+    document.getElementById('consignor-display-card').style.display = 'block'; 
+    document.getElementById('btn-next').classList.remove('w3-disabled'); 
+    document.getElementById('btn-next').disabled = false; 
+}
+
+function handleIdInput(el) {
+    const val = el.value.replace(/\D/g, ''); 
+    if (val.length < 1) { document.getElementById('consignor-results').style.display = 'none'; return; }
+    const matches = ALL_CONSIGNORS.filter(c => String(c.id).includes(val));
+    renderConsignors(matches);
+}
+
+function updateIntakeFormUI() {
+    const type = document.getElementById('cart_type').value;
+    const config = LOT_CONFIG[type];
+    if(!config) return;
+    document.getElementById('dynamic-intake-fields').style.display = 'block';
+    document.querySelectorAll('.field-group-ymm').forEach(el => el.style.display = config.ymm ? 'block' : 'none');
+    document.querySelector('.field-group-vin').style.display = config.vin ? 'block' : 'none';
+    document.querySelector('.field-group-color').style.display = config.color ? 'block' : 'none';
+    document.querySelector('.field-group-title').style.display = config.title ? 'block' : 'none';
+    document.querySelector('.field-group-desc').style.display = config.desc ? 'block' : 'none';
+    document.getElementById('lbl_vin').innerText = (type === 'Serialized Item') ? "Serial Number" : "VIN / Serial";
+    document.getElementById('lbl-img-1').innerText = config.photos[0];
+    document.getElementById('lbl-img-2').innerText = config.photos[1];
+    document.getElementById('lbl-img-3').innerText = config.photos[2];
+}
+
+function addToCart() {
+  const type = document.getElementById('cart_type').value;
+  const year = document.getElementById('cart_year').value; 
+  const make = document.getElementById('cart_make').value; 
+  const desc = document.getElementById('cart_desc').value; 
+  const model = document.getElementById('cart_model').value; 
+  const vin = document.getElementById('cart_vin').value; 
+  const title = document.getElementById('cart_title').value; 
+  const reserve = document.getElementById('cart_reserve').value; 
+  const note = document.getElementById('cart_note').value; 
+  const color = document.getElementById('cart_color').value; 
+  const img1 = document.getElementById('url-1').value; 
+  const img2 = document.getElementById('url-2').value; 
+  const img3 = document.getElementById('url-3').value; 
+  if(!type) { showModal("Validation", "Select Lot Type"); return; }
+  if(type === 'Other' || type === 'Serialized Item') { if(!desc) { showModal("Validation", "Description is required."); return; } } else { if(!year || !make) { showModal("Validation", "Year and Make are required."); return; } }
+  const item = { lotType: type, year, make, model, vin, title, reserve, desc, notes: note, color, img1, img2, img3, tasks: LOT_CONFIG[type].tasks };
+  CART_ITEMS.push(item); renderCart(); clearCartForm();
+}
+
+function renderCart() {
+  const list = document.getElementById('cart-list'); 
+  list.innerHTML = ""; 
+  document.getElementById('cart-count').innerText = CART_ITEMS.length + " Items";
+  if(CART_ITEMS.length === 0) { list.innerHTML = "<div class='w3-center w3-text-grey w3-padding'>No items added yet.</div>"; return; }
+  CART_ITEMS.forEach((item, idx) => {
+    const fullTitle = getLotTitle(item);
+    const thumbUrl = item.img1 || item.img2 || item.img3;
+    const imgHtml = thumbUrl ? `<img src="${thumbUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:10px">` : "";
+    const div = document.createElement('div'); div.className = `cart-item`;
+    div.innerHTML = `<div style="display:flex;align-items:center">${imgHtml}<div><div style="font-weight:bold">${fullTitle}</div><small class="w3-text-grey">${item.lotType}</small></div></div><div class="cart-actions"><i class="fa fa-trash cart-del" onclick="removeCartItem(${idx})"></i></div>`;
+    list.appendChild(div);
+  });
+}
+
+function removeCartItem(idx) { showModal("Confirm Delete", "Remove this item from the list?", function() { CART_ITEMS.splice(idx, 1); renderCart(); }); }
+function clearCartForm() { document.getElementById('cart_type').value = ""; ['cart_year','cart_make','cart_model','cart_vin','cart_title','cart_reserve','cart_desc','cart_note','cart_color','url-1','url-2','url-3'].forEach(id => document.getElementById(id).value = ""); [1,2,3].forEach(i => { document.getElementById('prev-'+i).style.display = 'none'; document.getElementById('prev-'+i).src = ""; }); document.getElementById('dynamic-intake-fields').style.display = 'none'; }
+function submitIntake() { const btn = document.getElementById('btn-submit-intake'); const originalText = btn.innerText; btn.innerText = "Saving..."; btn.disabled = true; const aucId = document.getElementById('in_target_auction').value; if(!aucId) { showModal("Validation", "Please select a Target Auction."); btn.innerText = originalText; btn.disabled = false; return; } const data = { consignorId: document.getElementById('in_cid').value, name: document.getElementById('in_selected_name').value, phone: document.getElementById('in_phone_hidden').value, address: document.getElementById('in_addr_hidden').value, items: CART_ITEMS, user: CURRENT_USER ? CURRENT_USER.username : "Intake", auctionId: aucId }; if(!data.name || data.items.length === 0) { showModal("Incomplete", "Enter Consignor and Items."); btn.innerText = originalText; btn.disabled = false; return; } google.script.run.withSuccessHandler(res => { btn.innerText = originalText; btn.disabled = false; if (res.success) { LAST_INTAKE_DATA = res.receiptData; switchStep('rx-step-3'); updateBreadcrumbs([{name: "Receiving", func: "openReceiving()"}, {name: "Receipt", func: null}]); } else { showModal("Error", res.message); } }).withFailureHandler(e => { showModal("Error", e.message); btn.innerText = originalText; btn.disabled = false; }).processIntakeForm(data); }
+function printReceipt() { if(!LAST_INTAKE_DATA) return; const newWindow = window.open('', '_blank'); if (newWindow) newWindow.document.write('<html><head><title>Generating Receipt...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating PDF...</h3><p>Please wait while we create your receipt.</p></body></html>'); document.getElementById('print-loading').style.display = 'block'; google.script.run.withSuccessHandler(res => { document.getElementById('print-loading').style.display = 'none'; LAST_RECEIPT_SHEET = res.sheetName; if (newWindow) newWindow.location.href = res.url; else window.open(res.url, '_blank'); }).withFailureHandler(e => { document.getElementById('print-loading').style.display = 'none'; if(newWindow) newWindow.close(); showModal("Error", "Failed: " + e.message); }).createReceiptSheet(LAST_INTAKE_DATA); }
+function printBatchLabels() { if(!LAST_INTAKE_DATA || !LAST_INTAKE_DATA.items) return; const generatedIds = LAST_INTAKE_DATA.items.map(i => i.generatedId); if(generatedIds.length === 0) return; const newWindow = window.open('', '_blank'); if (newWindow) newWindow.document.write('<html><head><title>Generating Labels...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating Labels...</h3><p>Please wait...</p></body></html>'); document.getElementById('print-loading').style.display = 'block'; google.script.run.withSuccessHandler(res => { document.getElementById('print-loading').style.display = 'none'; if (newWindow) newWindow.location.href = res.url; else window.open(res.url, '_blank'); setTimeout(() => { google.script.run.deleteReceiptSheet(res.sheetName); }, 60000); }).withFailureHandler(e => { document.getElementById('print-loading').style.display = 'none'; if(newWindow) newWindow.close(); showModal("Error", "Failed: " + e.message); }).createLabelSheet(generatedIds); }
+function finishIntake() { if (LAST_RECEIPT_SHEET) { google.script.run.deleteReceiptSheet(LAST_RECEIPT_SHEET); LAST_RECEIPT_SHEET = null; } LAST_INTAKE_DATA = null; resetIntakeFormState(); goHome(); }
+
+function triggerUpload(slotIdx) { activeSlot = slotIdx; document.getElementById('upload-input').click(); }
+function processUpload() { const file = document.getElementById('upload-input').files[0]; if(!file) return; const sq = document.getElementById('sq-' + activeSlot); sq.classList.add('loading'); const reader = new FileReader(); reader.onload = function(e) { document.getElementById('prev-' + activeSlot).src = e.target.result; document.getElementById('prev-' + activeSlot).style.display = 'block'; const base64 = e.target.result; google.script.run.withSuccessHandler(url => { sq.classList.remove('loading'); if(url.startsWith("ERROR")) { showModal("Upload Error", url); return; } document.getElementById('url-' + activeSlot).value = url; }).withFailureHandler(err => { sq.classList.remove('loading'); showModal("Upload Error", "Failed"); }).uploadIntakeImage(base64); }; reader.readAsDataURL(file); document.getElementById('upload-input').value = ""; }
+</script>
