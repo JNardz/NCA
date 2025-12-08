@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  
+  <!-- Barcode Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+  <!-- CUSTOM ALERT/CONFIRM MODAL -->
+  <div id="custom-modal-overlay">
+    <div class="custom-modal">
+        <div class="modal-header" id="modal-title">Alert</div>
+        <div class="modal-body" id="modal-msg">Something happened.</div>
+        <div class="modal-footer">
+            <button class="modal-btn btn-cancel" id="modal-btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="modal-btn btn-confirm" id="modal-btn-confirm">OK</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- SCANNER MODAL OVERLAY -->
+  <div id="scanner-overlay">
+    <div class="custom-modal" style="width:90%; max-width:500px;">
+        <div class="modal-header">
+            <i class="fa fa-qrcode"></i> Scan Barcode
+        </div>
+        <div class="modal-body" style="padding:0;">
+            <div id="reader" style="width:100%;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn btn-cancel" onclick="stopScanner()">Close Camera</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- NEW: IMAGE GALLERY OVERLAY -->
+  <div id="image-gallery-overlay" style="display:none;">
+    <span class="gallery-close" onclick="closeGallery()">&times;</span>
+    
+    <div class="gallery-content">
+       <img id="gallery-main-img" src="">
+    </div>
+
+    <!-- Navigation Arrows -->
+    <a class="gallery-prev" onclick="prevImage()">&#10094;</a>
+    <a class="gallery-next" onclick="nextImage()">&#10095;</a>
+
+    <!-- Toolbar -->
+    <div class="gallery-toolbar">
+       <button class="w3-button w3-black w3-round w3-small" onclick="openHDImage()"><i class="fa fa-external-link-alt"></i> HD</button>
+       <span id="gallery-counter" style="color:white; margin-left:15px; font-size:0.9rem">1 / 1</span>
+    </div>
+  </div>
+
+  <!-- LOGIN VIEW -->
+  <div id="view-login" class="full-screen-view" style="display:flex;">
+    <div class="login-card">
+      <div class="w3-center">
+        <h3 style="color:#2c3e50"><b>Sign In</b></h3>
+      </div>
+      <br>
+      <label>Username</label>
+      <input id="login_user" class="w3-input w3-border w3-round w3-margin-bottom" placeholder="Enter username...">
+      <label>Password</label>
+      <input id="login_pass" type="password" class="w3-input w3-border w3-round w3-margin-bottom" placeholder="Enter password..." onkeypress="if(event.key==='Enter') doLogin()">
+      <div id="login-error" class="w3-text-red w3-small w3-center" style="display:none; margin-bottom:10px;"></div>
+      <button id="btn-login" class="w3-button w3-block w3-custom-accent w3-round" onclick="doLogin()">Log In</button>
+    </div>
+  </div>
+
+  <!-- APP CONTAINER -->
+  <div id="app-container" style="display:none; flex-direction:column; height:100vh;">
+      
+      <header>
+          <span class="brand-logo" style="font-weight:bold; font-size:1.2rem;">North Country Auctions</span>
+          <div id="user-display" class="w3-small">
+             <i class="fa fa-user"></i> <span id="current-username">Guest</span>
+             <span style="margin:0 10px">|</span>
+             <span style="cursor:pointer; text-decoration:underline" onclick="doLogout()">Logout</span>
+          </div>
+      </header>
+    
+      <div id="breadcrumb-bar"><span class="crumb-current">Dashboard</span></div>
+    
+      <main>
+        <div id="view-dashboard">
+          <div class="dash-container">
+            <h2 style="color:#2c3e50"><b>Main Menu</b></h2>
+            <div class="app-grid">
+              <div class="tile" data-perm="RECEIVING" onclick="openReceiving()"><i class="fa fa-dolly"></i><span>Receiving</span></div>
+              <div class="tile" data-perm="LOT_MGMT" onclick="openApp('view-lot-mgmt'); loadData('LOT');"><i class="fa fa-boxes-stacked"></i><span>Lot Management</span></div>
+              <div class="tile" data-perm="CONSIGNORS" onclick="openApp('view-consignors'); loadData('CON');"><i class="fa fa-users"></i><span>Consignors</span></div>
+              <div class="tile" data-perm="AUCTIONS" onclick="openApp('view-auctions'); loadData('AUC');"><i class="fa fa-gavel"></i><span>Auctions</span></div>
+              <div class="tile" data-perm="USERS" onclick="openApp('view-users'); loadUserList();" style="display:none"><i class="fa fa-user-cog"></i><span>Manage Users</span></div>
+            </div>
+          </div>
+        </div>
+    
+        <!-- USER MANAGEMENT VIEW -->
+        <div id="view-users" class="app-view">
+            <div class="app-nav-bar">
+                <button class="nav-tab active">User Accounts</button>
+            </div>
+            <div style="max-width:800px; margin:20px auto; display:flex; gap:20px; align-items:flex-start">
+                <div class="w3-white w3-card w3-round w3-padding" style="flex:1">
+                    <h4>Create New User</h4>
+                    <hr>
+                    <label>Username</label><input id="new_u_name" class="w3-input w3-border w3-round w3-margin-bottom">
+                    <label>Password</label><input id="new_u_pass" class="w3-input w3-border w3-round w3-margin-bottom">
+                    <label>Permissions</label>
+                    <div class="w3-light-grey w3-padding w3-round w3-margin-bottom w3-small">
+                        <input type="checkbox" class="perm-chk" value="RECEIVING"> Receiving<br>
+                        <input type="checkbox" class="perm-chk" value="LOT_MGMT"> Lot Management<br>
+                        <input type="checkbox" class="perm-chk" value="CONSIGNORS"> Consignors<br>
+                        <input type="checkbox" class="perm-chk" value="AUCTIONS"> Auctions<br>
+                        <input type="checkbox" class="perm-chk" value="USERS"> User Admin
+                    </div>
+                    <button id="btn-create-user" class="w3-button w3-block w3-custom-accent w3-round" onclick="submitNewUser()">Create Account</button>
+                </div>
+                <div class="w3-white w3-card w3-round w3-padding" style="flex:1.5">
+                    <h4>Current Users</h4>
+                    <table class="w3-table w3-bordered">
+                        <thead><tr class="w3-light-grey"><th>Username</th><th>Permissions</th></tr></thead>
+                        <tbody id="user-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="main-view-footer">
+                <button class="w3-button w3-white w3-border w3-round" onclick="goHome()"><i class="fa fa-chevron-left"></i> Back to Dashboard</button>
+            </div>
+        </div>
+    
+        <!-- RECEIVING VIEW -->
+        <div id="view-receiving" class="app-view">
+          <div class="form-card">
+            
+            <!-- STEP 1: IDENTIFY -->
+            <div id="rx-step-1" class="intake-step active">
+              <div class="w3-border-bottom w3-margin-bottom w3-padding-small"><span class="w3-tag w3-custom-accent">Step 1</span> <span class="w3-large">Identify Consignor</span></div>
+              
+              <!-- SEARCH BAR ON TOP -->
+              <div style="position:relative; margin-bottom: 20px;">
+                <label><b>Search Consignor</b> <span class="w3-text-grey w3-small">(Name, ID, Business, Phone)</span></label>
+                <div style="display:flex; gap:10px">
+                    <input id="in_search" class="w3-input w3-border w3-round w3-light-grey" style="flex:1; padding: 10px;" placeholder="Start typing to search..." onkeyup="filterConsignors()">
+                    <button class="w3-button w3-custom-accent w3-round" style="width:120px;" onclick="openCreateConsignor('receiving')"><i class="fa fa-plus"></i> New</button>
+                </div>
+                <!-- Results Dropdown -->
+                <div id="consignor-results"></div>
+              </div>
+
+              <!-- SELECTION DISPLAY CARD (Hidden until selected) -->
+              <div id="consignor-display-card" class="w3-card w3-white w3-round w3-padding w3-border-left w3-border-green" style="display:none; margin-bottom:20px; border-left-width: 5px !important;">
+                <h4 class="w3-text-custom-accent" style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:5px;">
+                    <i class="fa fa-check-circle"></i> Selected Consignor
+                </h4>
+                
+                <div class="w3-row-padding">
+                  <div class="w3-col m3">
+                    <label class="w3-text-grey w3-tiny" style="letter-spacing:1px">CONSIGNOR ID</label>
+                    <div id="disp_c_id" class="w3-xlarge" style="font-weight:bold; color:#2c3e50">---</div>
+                  </div>
+                  <div class="w3-col m5">
+                    <label class="w3-text-grey w3-tiny" style="letter-spacing:1px">FULL NAME</label>
+                    <div id="disp_c_name" class="w3-large" style="font-weight:600">---</div>
+                  </div>
+                  <div class="w3-col m4">
+                    <label class="w3-text-grey w3-tiny" style="letter-spacing:1px">PHONE</label>
+                    <div id="disp_c_phone" class="w3-medium">---</div>
+                  </div>
+                </div>
+
+                <div class="w3-row-padding" style="margin-top:15px">
+                  <div class="w3-col m4">
+                    <label class="w3-text-grey w3-tiny" style="letter-spacing:1px">BUSINESS NAME</label>
+                    <div id="disp_c_biz" class="w3-medium">---</div>
+                  </div>
+                  <div class="w3-col m8">
+                    <label class="w3-text-grey w3-tiny" style="letter-spacing:1px">ADDRESS</label>
+                    <div id="disp_c_addr" class="w3-medium">---</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Hidden Inputs for Form Logic (Removed Redundant ID Object) -->
+              <input type="hidden" id="in_cid">
+              <input type="hidden" id="in_selected_name">
+              <input type="hidden" id="in_phone_hidden">
+              <input type="hidden" id="in_addr_hidden">
+
+              <div class="w3-right w3-margin-top">
+                  <button id="btn-next" class="w3-button w3-custom-accent w3-round w3-disabled" onclick="goToStep2()" disabled>
+                      Confirm & Next <i class="fa fa-chevron-right"></i>
+                  </button>
+              </div>
+            </div>
+    
+            <!-- STEP 2: BUILD INVENTORY (DYNAMIC) -->
+            <div id="rx-step-2" class="intake-step">
+              <div class="w3-border-bottom w3-margin-bottom w3-padding-small">
+                 <button class="w3-button w3-tiny w3-white w3-border w3-round no-print" onclick="goToStep1()">Back</button>
+                 <span class="w3-tag w3-custom-accent">Step 2</span> <span class="w3-large">Build Inventory</span>
+                 <span id="summ-con-name" class="w3-right w3-text-grey w3-small" style="margin-top:5px"></span>
+              </div>
+              <div id="intake-form-box" class="w3-card-2 w3-light-grey w3-padding w3-round w3-margin-bottom">
+                
+                <!-- TARGET AUCTION SELECTOR -->
+                <div class="w3-white w3-padding w3-round w3-border w3-margin-bottom" style="border-left:5px solid #61C642 !important">
+                    <label class="w3-text-grey w3-small" style="display:block;margin-bottom:5px"><b>Target Auction for these items:</b></label>
+                    <select id="in_target_auction" class="w3-select w3-border w3-white">
+                        <option value="" disabled selected>Loading Auctions...</option>
+                    </select>
+                </div>
+
+                <h5 id="form-title" style="margin-top:0"><i class="fa fa-plus-circle"></i> Add New Item</h5>
+                
+                <!-- LOT TYPE SELECTOR -->
+                <label class="w3-text-custom-accent"><b>1. Select Lot Type</b></label>
+                <select id="cart_type" class="w3-select w3-border w3-white w3-margin-bottom" onchange="updateIntakeFormUI()">
+                    <option value="" disabled selected>Choose Type...</option>
+                    <option value="Heavy Machinery">Heavy Machinery</option>
+                    <option value="Vehicle">Vehicle</option>
+                    <option value="Serialized Item">Serialized Item</option>
+                    <option value="Other">Other</option>
+                </select>
+    
+                <div id="dynamic-intake-fields" style="display:none">
+                    <label><b>2. Details</b></label>
+                    <div class="w3-row-padding">
+                      <!-- Dynamic Fields -->
+                      <div class="w3-col m2 field-group-ymm"><label>Year</label><input id="cart_year" class="w3-input w3-border w3-white" type="number" placeholder="2015"></div>
+                      <div class="w3-col m3 field-group-ymm"><label>Make</label><input id="cart_make" class="w3-input w3-border w3-white" placeholder="Ford"></div>
+                      <div class="w3-col m3 field-group-ymm"><label>Model</label><input id="cart_model" class="w3-input w3-border w3-white" placeholder="F-150"></div>
+                      <div class="w3-col m4 field-group-vin"><label id="lbl_vin">VIN / Serial</label><input id="cart_vin" class="w3-input w3-border w3-white" placeholder="..."></div>
+                      <div class="w3-col m3 field-group-color" style="display:none"><label>Color</label><input id="cart_color" class="w3-input w3-border w3-white" placeholder="Red"></div>
+                    </div>
+                    
+                    <div class="w3-row-padding w3-margin-top">
+                       <!-- Description Field: Toggled based on type -->
+                       <div class="w3-col m8 field-group-desc"><label>Description</label><input id="cart_desc" class="w3-input w3-border w3-white" placeholder="e.g. Pickup Truck with Plow"></div>
+                       <div class="w3-col m4"><label>Notes</label><input id="cart_note" class="w3-input w3-border w3-white" placeholder="Runs and drives..."></div>
+                    </div>
+    
+                    <div class="w3-row-padding w3-margin-top">
+                       <div class="w3-col m3 field-group-title"><label>Title Status</label><input id="cart_title" class="w3-input w3-border w3-white" placeholder="Clean, Salvage..."></div>
+                       <div class="w3-col m3"><label>Reserve ($)</label><input id="cart_reserve" class="w3-input w3-border w3-white" type="number" placeholder="0.00"></div>
+                    </div>
+    
+                    <label class="w3-margin-top" style="display:block"><b>3. Required Photos</b></label>
+                    <div class="img-upload-grid">
+                       <div class="img-square" id="sq-1" onclick="triggerUpload(1)"><i class="fa fa-camera"></i><div id="lbl-img-1">Overall</div><img id="prev-1" style="display:none"><input type="hidden" id="url-1"></div>
+                       <div class="img-square" id="sq-2" onclick="triggerUpload(2)"><i class="fa fa-tag"></i><div id="lbl-img-2">Tag</div><img id="prev-2" style="display:none"><input type="hidden" id="url-2"></div>
+                       <div class="img-square" id="sq-3" onclick="triggerUpload(3)"><i class="fa fa-barcode"></i><div id="lbl-img-3">VIN</div><img id="prev-3" style="display:none"><input type="hidden" id="url-3"></div>
+                       <input type="file" id="upload-input" accept="image/*" capture="environment" style="display:none" onchange="processUpload()">
+                    </div>
+    
+                    <div class="w3-margin-top w3-right-align">
+                      <input type="hidden" id="cart_edit_idx" value="-1">
+                      <button id="btn-cart-clear" class="w3-button w3-white w3-border w3-round" onclick="clearCartForm()">Clear</button>
+                      <button id="btn-cart-add" class="w3-button w3-custom-accent w3-round" onclick="addToCart()"><i class="fa fa-arrow-down"></i> Add to List</button>
+                    </div>
+                </div>
+              </div>
+              <div id="cart-container" style="border-top:2px solid #ddd; padding-top:10px;">
+                 <h4 class="w3-text-grey">Intake Review List <span id="cart-count" class="w3-tag w3-round w3-blue-grey">0 Items</span></h4>
+                 <div id="cart-list" style="max-height:300px; overflow-y:auto; margin-bottom:15px"></div>
+              </div>
+              <div class="w3-center w3-margin-top no-print">
+                <button id="btn-submit-intake" class="w3-button w3-custom-accent w3-large w3-round" onclick="submitIntake()">Submit Intake</button>
+              </div>
+            </div>
+    
+            <!-- STEP 3: COMPLETION (Same) -->
+            <div id="rx-step-3" class="intake-step">
+              <div class="success-banner"><i class="fa fa-check-circle"></i> <b>Intake Saved Successfully!</b></div>
+              <div class="w3-center w3-padding-32">
+                 <p>Would you like to print a receipt for this consignor?</p>
+                 <button id="rcpt-link-btn" class="w3-button w3-custom-accent w3-xlarge w3-round w3-hover-green" onclick="printReceipt()"><i class="fa fa-print"></i> Print Receipt</button>
+                 <br><br>
+                 <button id="lbl-link-btn" class="w3-button w3-blue-grey w3-xlarge w3-round w3-hover-blue" onclick="printBatchLabels()"><i class="fa fa-barcode"></i> Print All Labels</button>
+                 <br><br>
+                 <div id="print-loading" style="display:none; color:#777"><i class="fa fa-spinner fa-spin"></i> Generating Documents...</div>
+              </div>
+              <div class="w3-center w3-margin-top no-print" style="padding:20px; border-top:1px solid #ddd">
+                <button class="w3-button w3-white w3-border w3-round" onclick="finishIntake()"><i class="fa fa-check"></i> Done (Return to Dashboard)</button>
+              </div>
+            </div>
+          </div>
+          <div class="main-view-footer">
+              <button class="w3-button w3-white w3-border w3-round" onclick="goHome()"><i class="fa fa-chevron-left"></i> Back to Dashboard</button>
+          </div>
+        </div>
+    
+        <!-- LOT MGMT & AUCTIONS -->
+        <div id="view-lot-mgmt" class="app-view">
+            <div class="app-nav-bar">
+            <button class="w3-button w3-white w3-border w3-round w3-small" onclick="toggleSidebar('lot-sidebar')"><i class="fa fa-filter"></i> Filters</button>
+            <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div><button class="nav-tab active">All Lots</button>
+            </div>
+            <div class="flex-container">
+                <div class="sidebar" id="lot-sidebar">
+                    <h4><i class="fa fa-filter"></i> Filters</h4>
+                    <button class="w3-button w3-block w3-light-grey w3-round" onclick="loadData('LOT')">Refresh List</button>
+                </div>
+                <div class="list-area" id="lot-list-container">
+                    <div class="sticky-search-bar">
+                        <input id="f_lot_search" class="w3-input w3-border w3-round" style="flex:1" placeholder="Search Lots..." onkeyup="filterData('LOT')">
+                        <button class="w3-button w3-light-grey w3-border w3-round" onclick="startScanner()"><i class="fa fa-qrcode"></i></button>
+                    </div>
+                    <div class="list-content" id="lot-list-content"></div>
+                </div>
+            </div>
+            <div class="main-view-footer">
+                <button class="w3-button w3-white w3-border w3-round" onclick="goHome()"><i class="fa fa-chevron-left"></i> Back to Dashboard</button>
+            </div>
+        </div>
+    
+        <div id="view-consignors" class="app-view">
+          <div class="app-nav-bar">
+            <button class="w3-button w3-white w3-border w3-round w3-small" onclick="toggleSidebar('con-sidebar')"><i class="fa fa-filter"></i> Filters</button>
+            <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div><button class="nav-tab active">All Consignors</button>
+          </div>
+          <div class="flex-container">
+            <div class="sidebar" id="con-sidebar">
+              <div style="display:flex; justify-content:space-between; align-items:center">
+                 <h4><i class="fa fa-users"></i> Consignors</h4>
+                 <button class="w3-button w3-custom-accent w3-tiny w3-round" onclick="openCreateConsignor('consignors')">+ New</button>
+              </div>
+              <br>
+              <button class="w3-button w3-block w3-light-grey w3-round" onclick="loadData('CON')">Refresh List</button>
+            </div>
+            <div class="list-area" id="con-list-container">
+                <div class="sticky-search-bar">
+                    <input id="f_con_search" class="w3-input w3-border w3-round" style="flex:1" placeholder="Search Name/ID..." onkeyup="filterData('CON')">
+                </div>
+                <div class="list-content" id="con-list-content"></div>
+            </div>
+          </div>
+          <div class="main-view-footer">
+              <button class="w3-button w3-white w3-border w3-round" onclick="goHome()"><i class="fa fa-chevron-left"></i> Back to Dashboard</button>
+          </div>
+          
+          <!-- Consignor Detail Overlay -->
+          <div id="con-detail-overlay" class="detail-overlay">
+            <div class="detail-left">
+              <div class="id-header"><small>CONSIGNOR</small><h1 id="d_conId" style="margin:0">---</h1></div>
+              <div class="w3-white w3-padding w3-center" style="border-bottom:1px solid #ddd;"><i class="fa fa-user-circle w3-text-custom-accent" style="font-size:100px;"></i></div>
+            </div>
+            <div class="detail-right">
+              <div id="con-loading-indicator" class="loading-indicator"><i class="fa fa-spinner fa-spin"></i><br>Fetching Profile...</div>
+              <div id="con-error-msg" class="error-msg" style="display:none"><i class="fa fa-exclamation-triangle fa-3x"></i><br><span id="con-error-text"></span></div>
+              <div id="con-tab-content-container" style="display:none;">
+                  <div class="tab-bar">
+                    <button class="tab-btn active" onclick="switchConTab('con-info', this)">Info</button>
+                    <button class="tab-btn" onclick="switchConTab('con-receipts', this)">Receipts</button>
+                    <button class="tab-btn" onclick="switchConTab('con-lots', this)">Lots</button>
+                    <button class="tab-btn" onclick="switchConTab('con-inv', this)">Invoices</button>
+                  </div>
+                  <div id="con-info" class="con-tab-content active">
+                     <div id="con-info-form">
+                       <div class="data-grid">
+                         <div class="grp"><label class="field-lbl">Name</label><div id="cv_name" class="field-val"></div><input id="ci_name" class="field-inp"></div>
+                         <div class="grp"><label class="field-lbl">Phone</label><div id="cv_phone" class="field-val"></div><input id="ci_phone" class="field-inp"></div>
+                         <div class="grp"><label class="field-lbl">Email</label><div id="cv_email" class="field-val"></div><input id="ci_email" class="field-inp"></div>
+                         <div class="grp"><label class="field-lbl">Address</label><div id="cv_address" class="field-val"></div><input id="ci_address" class="field-inp"></div>
+                       </div>
+                       <div class="chat-box" id="con-chat-box">
+                         <div class="chat-header w3-custom-accent">
+                            <span><i class="fa fa-comments"></i> Notes</span>
+                            <i class="fa fa-times" style="cursor:pointer" onclick="toggleConChat(false)"></i>
+                         </div>
+                         <div class="chat-msgs" id="con-chat-feed"></div>
+                         <div class="chat-input-area">
+                            <input id="con-chat-inp" type="text" placeholder="Add note..." onkeypress="if(event.key==='Enter') sendConNote()">
+                            <button class="w3-button w3-custom-accent w3-circle" onclick="sendConNote()"><i class="fa fa-paper-plane"></i></button>
+                         </div>
+                       </div>
+                     </div>
+                  </div>
+                  <div id="con-receipts" class="con-tab-content"><table class="w3-table w3-bordered"><thead><tr class="w3-light-grey"><th>Date</th><th>Link</th></tr></thead><tbody id="con-rcpt-list"></tbody></table></div>
+                  <div id="con-lots" class="con-tab-content"><table class="w3-table w3-bordered"><thead><tr class="w3-light-grey"><th>Inv #</th><th>Lot #</th><th>Description</th><th>Status</th></tr></thead><tbody id="con-lot-list"></tbody></table></div>
+                  <div id="con-inv" class="con-tab-content"><div class="w3-padding w3-center w3-text-grey">No Invoices Found</div></div>
+              </div>
+            </div>
+            <div class="bottom-banner">
+                 <div style="display:flex; gap:10px;">
+                     <button id="btn-con-notes" class="w3-button w3-light-grey w3-round w3-border" onclick="toggleConChat(true)">
+                       <i class="fa fa-comments w3-text-custom-accent"></i> Notes
+                     </button>
+                     <button id="btn-con-edit" class="w3-button w3-custom-accent w3-round" onclick="toggleConEdit()">
+                       <i class="fa fa-pencil"></i> Edit Profile
+                     </button>
+                 </div>
+                 <button id="btn-back-con" class="w3-button w3-white w3-border w3-round" onclick="handleBackClick('con')">Back</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="view-auctions" class="app-view">
+            <div class="app-nav-bar">
+                <button class="w3-button w3-white w3-border w3-round w3-small" onclick="toggleSidebar('auc-sidebar')"><i class="fa fa-filter"></i> Filters</button>
+                <div style="width:1px; height:20px; background:#ddd; margin:0 5px;"></div><button class="nav-tab active">All Auctions</button>
+            </div>
+            <div class="flex-container">
+                <div class="sidebar" id="auc-sidebar">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h4><i class="fa fa-gavel"></i> Auctions</h4>
+                    <button class="w3-button w3-custom-accent w3-tiny w3-round" onclick="openCreateAucModal()">+ New</button>
+                </div>
+                <br>
+                <button class="w3-button w3-block w3-light-grey w3-round" onclick="loadData('AUC')">Refresh List</button>
+                </div>
+                <div class="list-area" id="auc-list-container">
+                    <div class="sticky-search-bar">
+                        <input id="f_auc_search" class="w3-input w3-border w3-round" style="flex:1" placeholder="Search Auctions..." onkeyup="filterData('AUC')">
+                    </div>
+                    <div class="list-content" id="auc-list-content"></div>
+                </div>
+            </div>
+            <div class="main-view-footer">
+                <button class="w3-button w3-white w3-border w3-round" onclick="goHome()"><i class="fa fa-chevron-left"></i> Back to Dashboard</button>
+            </div>
+
+            <!-- AUCTION MODALS -->
+            <div id="auc-detail-overlay" class="detail-overlay">
+                <div class="detail-left">
+                <div class="id-header"><small>AUCTION</small><h1 id="d_aucId" style="margin:0">---</h1></div>
+                <div class="w3-white w3-padding w3-center" style="border-bottom:1px solid #ddd;">
+                    <i class="fa fa-calendar-alt w3-text-custom-accent" style="font-size:100px;"></i>
+                </div>
+                </div>
+                <div class="detail-right">
+                <div id="auc-loading-indicator" class="loading-indicator"><i class="fa fa-spinner fa-spin"></i><br>Fetching Auction...</div>
+                <div id="auc-tab-content-container" style="display:none;">
+                    <div class="tab-bar">
+                        <button class="tab-btn active" onclick="switchConTab('auc-info', this)">Info</button>
+                        <button class="tab-btn" onclick="switchConTab('auc-lots', this)">Lots Assigned</button>
+                        <button class="tab-btn" onclick="switchConTab('auc-cons', this)">Consignors</button>
+                    </div>
+                    <div id="auc-info" class="con-tab-content active">
+                        <div id="auc-info-form">
+                        <div class="data-grid">
+                            <div class="grp"><label class="field-lbl">Auction Name</label><div id="av_name" class="field-val"></div><input id="ai_name" class="field-inp"></div>
+                            <div class="grp"><label class="field-lbl">Location</label><div id="av_location" class="field-val"></div><input id="ai_location" class="field-inp"></div>
+                            <div class="grp"><label class="field-lbl">Start Date</label><div id="av_dateStart" class="field-val"></div><input id="ai_dateStart" type="date" class="field-inp"></div>
+                            <div class="grp"><label class="field-lbl">End Date</label><div id="av_dateEnd" class="field-val"></div><input id="ai_dateEnd" type="date" class="field-inp"></div>
+                            <div class="grp" style="grid-column: span 2"><label class="field-lbl">Description</label><div id="av_desc" class="field-val"></div><input id="ai_desc" class="field-inp"></div>
+                        </div>
+                        </div>
+                    </div>
+                    <div id="auc-lots" class="con-tab-content">
+                        <table class="w3-table w3-bordered"><thead><tr class="w3-light-grey"><th>Inv #</th><th>Lot #</th><th>Description</th><th>Status</th></tr></thead><tbody id="auc-lot-list"></tbody></table>
+                    </div>
+                    <div id="auc-cons" class="con-tab-content">
+                        <table class="w3-table w3-bordered"><thead><tr class="w3-light-grey"><th>ID</th><th>Name</th><th>Phone</th></tr></thead><tbody id="auc-con-list"></tbody></table>
+                    </div>
+                </div>
+                </div>
+                <div class="bottom-banner">
+                    <div style="display:flex; gap:10px;">
+                        <button id="btn-auc-edit" class="w3-button w3-custom-accent w3-round" onclick="toggleAucEdit()"><i class="fa fa-pencil"></i> Edit Auction</button>
+                    </div>
+                    <button id="btn-back-auc" class="w3-button w3-white w3-border w3-round" onclick="handleBackClick('auc')">Back</button>
+                </div>
+            </div>
+            <div id="auc-create-overlay" class="detail-overlay">
+                <button class="w3-button w3-red w3-circle w3-display-topright" style="margin:10px; z-index:50" onclick="closeCreateAuc()">&times;</button>
+                <div class="detail-left">
+                <div class="id-header"><small>NEW AUCTION</small><h1 id="new_auc_display_id">---</h1></div>
+                <div class="w3-white w3-padding w3-center" style="border-bottom:1px solid #ddd;">
+                    <i class="fa fa-plus-circle w3-text-custom-accent" style="font-size:100px;"></i>
+                </div>
+                </div>
+                <div class="detail-right">
+                <div class="w3-container w3-padding">
+                    <h3>Create New Auction</h3>
+                    <hr>
+                    <div class="data-grid">
+                    <div class="grp"><label class="field-lbl">Auction ID</label><input id="new_auc_id" class="field-inp" style="display:block; font-weight:bold" oninput="document.getElementById('new_auc_display_id').innerText=this.value"></div>
+                    <div class="grp"><label class="field-lbl">Auction Name</label><input id="new_auc_name" class="field-inp" style="display:block" placeholder="e.g. September Heavy Equipment"></div>
+                    <div class="grp"><label class="field-lbl">Start Date</label><input id="new_auc_start" type="date" class="field-inp" style="display:block"></div>
+                    <div class="grp"><label class="field-lbl">End Date</label><input id="new_auc_end" type="date" class="field-inp" style="display:block"></div>
+                    <div class="grp" style="grid-column:span 2"><label class="field-lbl">Location</label><input id="new_auc_loc" class="field-inp" style="display:block" value="Main Yard"></div>
+                    <div class="grp" style="grid-column:span 2"><label class="field-lbl">Description</label><input id="new_auc_desc" class="field-inp" style="display:block" placeholder="Notes about this auction..."></div>
+                    </div>
+                    <br>
+                    <div class="w3-right">
+                    <button class="w3-button w3-white w3-border w3-round" onclick="closeCreateAuc()">Cancel</button>
+                    <button id="btn-create-auc" class="w3-button w3-custom-accent w3-round" onclick="submitNewAuctionForm()">Create Auction</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    
+      </main>
+
+  <!-- LOT DETAIL OVERLAY -->
+  <div id="lot-detail-overlay" class="detail-overlay">
+    <div class="detail-left">
+      <div class="id-header"><small>INVENTORY ID</small><h1 id="d_lotId" style="margin:0">---</h1></div>
+      <div class="w3-padding w3-center w3-light-grey" style="border-bottom:1px solid #ddd">
+          <small class="w3-text-grey">Current Lot Number</small>
+          <div id="d_lotNumDisplay" style="font-weight:bold; font-size:1.2em">---</div>
+      </div>
+      <div class="img-area" onclick="openGallery(0)" style="cursor:pointer; position:relative;">
+         <img id="d_img" src="" style="display:none">
+         <div id="d_no_img" style="text-align:center; color:#ccc"><i class="fa fa-image fa-3x"></i><br>No Image</div>
+         <div style="position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,0.6); color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem;">
+            <i class="fa fa-images"></i> View Gallery
+         </div>
+      </div>
+    </div>
+
+    <div class="detail-right">
+       <div id="lot-loading-indicator" class="loading-indicator"><i class="fa fa-spinner fa-spin"></i><br>Fetching Lot Details...</div>
+       <div id="lot-error-msg" class="error-msg" style="display:none"><i class="fa fa-exclamation-triangle fa-3x"></i><br><span id="lot-error-text"></span></div>
+       
+       <div id="lot-content-wrapper" style="display:none">
+          <div class="tab-bar">
+              <button class="tab-btn active" onclick="switchConTab('lot-info', this)">Details</button>
+              <button class="tab-btn" onclick="switchConTab('lot-consignor', this)">Consignor</button>
+              <button class="tab-btn" onclick="switchConTab('lot-images', this)">Images</button>
+          </div>
+
+          <div id="lot-info" class="con-tab-content active">
+              <div id="detail-form">
+                <div style="display:flex; justify-content:space-between"><h2 id="d_head_desc" style="margin:0">Loading...</h2></div>
+                <div class="data-grid">
+                   <div class="grp"><label class="field-lbl">Description</label><div id="v_desc" class="field-val"></div><input id="i_desc" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Type</label><div id="v_type" class="field-val"></div><input id="i_type" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Make</label><div id="v_make" class="field-val"></div><input id="i_make" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Model</label><div id="v_model" class="field-val"></div><input id="i_model" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Year</label><div id="v_year" class="field-val"></div><input id="i_year" class="field-inp" type="number"></div>
+                   <div class="grp"><label class="field-lbl">Mileage</label><div id="v_mileage" class="field-val"></div><input id="i_mileage" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">VIN</label><div id="v_vin" class="field-val"></div><input id="i_vin" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Title</label><div id="v_title" class="field-val"></div><input id="i_title" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Reserve</label><div id="v_reserve" class="field-val"></div><input id="i_reserve" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Payment</label><div id="v_payment" class="field-val"></div><input id="i_payment" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Transporter</label><div id="v_transporter" class="field-val"></div><input id="i_transporter" class="field-inp"></div>
+                   <div class="grp"><label class="field-lbl">Current Auction</label><div id="v_auction" class="field-val"></div><input id="i_auction" class="field-inp" disabled title="Locked"></div>
+                   <div class="grp">
+                      <label class="field-lbl">Lot Number</label>
+                      <div id="v_lotNumber" class="field-val"></div>
+                      <input id="i_lotNumber" class="field-inp" placeholder="e.g. 100-50">
+                   </div>
+                </div>
+              </div>
+          </div>
+
+          <!-- CONSIGNOR TAB -->
+          <div id="lot-consignor" class="con-tab-content">
+             <div class="data-grid">
+               <div class="grp"><label class="field-lbl">Consignor ID</label><div id="lc_id" class="field-val">---</div></div>
+               <div class="grp"><label class="field-lbl">Name</label><div id="lc_name" class="field-val">---</div></div>
+               <div class="grp"><label class="field-lbl">Business</label><div id="lc_biz" class="field-val">---</div></div>
+               <div class="grp"><label class="field-lbl">Phone</label><div id="lc_phone" class="field-val">---</div></div>
+               <div class="grp"><label class="field-lbl">Email</label><div id="lc_email" class="field-val">---</div></div>
+               <div class="grp" style="grid-column:span 2"><label class="field-lbl">Address</label><div id="lc_addr" class="field-val">---</div></div>
+             </div>
+             <!-- Button Removed -->
+          </div>
+
+          <!-- IMAGES TAB -->
+          <div id="lot-images" class="con-tab-content">
+             <div class="img-upload-grid" id="lot-img-grid">
+                <!-- Images injected here -->
+             </div>
+             <div class="w3-center w3-margin-top">
+                <input type="file" id="lot-img-upload" accept="image/*" multiple style="display:none" onchange="processLotImageUpload()">
+                <button class="w3-button w3-custom-accent w3-round" onclick="triggerLotImageUpload()"><i class="fa fa-camera"></i> Add Photos</button>
+             </div>
+          </div>
+
+       </div>
+    </div>
+    
+    <div class="bottom-banner">
+       <div style="display:flex; gap:10px;">
+           <button id="btn-notes" class="w3-button w3-light-grey w3-round w3-border" onclick="toggleChat('lot')">
+             <i class="fa fa-comments w3-text-custom-accent"></i> Notes
+           </button>
+           <button id="btn-edit" class="w3-button w3-custom-accent w3-round" onclick="toggleEdit()">
+             <i class="fa fa-pencil"></i> Edit Lot
+           </button>
+           <button class="w3-button w3-blue-grey w3-round" onclick="printLabel(CURRENT_ITEM.lotId)">
+             <i class="fa fa-barcode"></i> Label
+           </button>
+       </div>
+       <button id="btn-back-lot" class="w3-button w3-white w3-border w3-round" onclick="handleBackClick('lot')">Back</button>
+    </div>
+
+    <div class="chat-box" id="lot-chat-box">
+       <div class="chat-header w3-custom-accent">
+          <span><i class="fa fa-comments"></i> Notes</span>
+          <i class="fa fa-times" style="cursor:pointer" onclick="toggleChat('lot')"></i>
+       </div>
+       <div class="chat-msgs" id="lot-chat-feed"></div>
+       <div class="chat-input-area">
+          <input id="lot-chat-inp" type="text" placeholder="Add note..." onkeypress="if(event.key==='Enter') sendNote('lot')">
+          <button class="w3-button w3-custom-accent w3-circle" onclick="sendNote('lot')"><i class="fa fa-paper-plane"></i></button>
+       </div>
+    </div>
+  </div>
+  
+  <!-- Includes -->
+  <?!= include('JS_General'); ?>
+  <?!= include('JS_Receiving'); ?>
+  <?!= include('JS_LotManagement'); ?>
+  <?!= include('JS_Consignors'); ?>
+  <?!= include('JS_Auctions'); ?>
+  <?!= include('JS_ManageUsers'); ?>
+  <?!= include('JS_Dashboard'); ?>
+
+</body>
+</html>
