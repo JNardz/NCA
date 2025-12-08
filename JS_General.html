@@ -1,0 +1,470 @@
+<script>
+/* ==================================================
+   GENERAL & SHARED LOGIC
+   ================================================== */
+
+/* --- MODAL LOGIC --- */
+function showModal(title, message, callback) {
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('modal-msg').innerText = message;
+    const overlay = document.getElementById('custom-modal-overlay');
+    const btnConfirm = document.getElementById('modal-btn-confirm');
+    const btnCancel = document.getElementById('modal-btn-cancel');
+    
+    btnConfirm.onclick = null;
+    
+    if (callback) {
+        btnCancel.style.display = 'block';
+        btnConfirm.innerText = "Yes";
+        btnConfirm.onclick = function() { closeModal(); callback(); };
+    } else {
+        btnCancel.style.display = 'none';
+        btnConfirm.innerText = "OK";
+        btnConfirm.onclick = function() { closeModal(); };
+    }
+    overlay.style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('custom-modal-overlay').style.display = 'none';
+}
+
+/* --- NAVIGATION & UI HELPERS --- */
+function updateBreadcrumbs(pathArray) {
+  const bar = document.getElementById('breadcrumb-bar'); 
+  bar.innerHTML = "";
+  let html = `<span class="crumb-item" onclick="goHome()">Dashboard</span>`;
+  pathArray.forEach((step, index) => { 
+    html += `<span class="crumb-separator">/</span>`; 
+    if (index === pathArray.length - 1) { 
+      html += `<span class="crumb-current">${step.name}</span>`; 
+    } else { 
+      html += `<span class="crumb-item" onclick="${step.func}">${step.name}</span>`; 
+    } 
+  });
+  bar.innerHTML = html;
+}
+
+function openApp(viewId) { 
+  // Cleanup Lot Search if leaving Lot Management
+  if (viewId !== 'view-lot-mgmt') {
+      const lotSearch = document.getElementById('f_lot_search');
+      if (lotSearch) lotSearch.value = "";
+  }
+
+  document.querySelectorAll('.app-view, #view-dashboard, #view-receiving, #view-users').forEach(el => el.style.display = 'none'); 
+  document.querySelectorAll('.detail-overlay').forEach(el => el.style.display = 'none');
+  document.getElementById(viewId).style.display = (viewId === 'view-receiving' ? 'block' : 'flex'); 
+}
+
+function goHome() { 
+  openApp('view-dashboard'); 
+  updateBreadcrumbs([]); 
+}
+
+function toggleSidebar(id) { 
+  document.getElementById(id).classList.toggle('closed'); 
+}
+
+/* --- LOGIN LOGIC --- */
+let CURRENT_USER = null;
+
+function doLogin() {
+    const user = document.getElementById('login_user').value;
+    const pass = document.getElementById('login_pass').value;
+    const err = document.getElementById('login-error');
+    const btn = document.getElementById('btn-login');
+
+    if(!user || !pass) {
+        err.style.display = 'block';
+        err.innerText = 'Please enter username and password.';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Verifying...";
+    err.style.display = 'none';
+
+    google.script.run
+        .withSuccessHandler(res => {
+            btn.disabled = false;
+            btn.innerText = "Log In";
+            if(res.success) {
+                CURRENT_USER = res;
+                document.getElementById('view-login').style.display = 'none';
+                document.getElementById('app-container').style.display = 'flex';
+                document.getElementById('current-username').innerText = res.username;
+                applyPermissions(res.permissions);
+                goHome();
+            } else {
+                err.style.display = 'block';
+                err.innerText = res.message;
+            }
+        })
+        .withFailureHandler(e => {
+            err.style.display = 'block';
+            err.innerText = "Connection Error: " + e.message;
+            btn.disabled = false;
+            btn.innerText = "Log In";
+        })
+        .loginUser(user, pass);
+}
+
+function doLogout() {
+    CURRENT_USER = null;
+    document.getElementById('login_user').value = "";
+    document.getElementById('login_pass').value = "";
+    document.getElementById('btn-login').disabled = false;
+    document.getElementById('btn-login').innerText = "Log In";
+    document.getElementById('view-login').style.display = 'flex';
+    document.getElementById('app-container').style.display = 'none';
+}
+
+function applyPermissions(perms) {
+    const tiles = document.querySelectorAll('.tile');
+    tiles.forEach(t => {
+        const req = t.getAttribute('data-perm');
+        if(!req || perms.includes(req)) {
+            t.style.display = 'flex';
+        } else {
+            t.style.display = 'none';
+        }
+    });
+}
+
+/* --- SHARED DATA LOADING & VIEWERS --- */
+let DATA_CACHE = []; 
+let CURRENT_ITEM = null;
+
+function loadData(type) {
+  if(window.innerWidth < 768) document.querySelectorAll('.sidebar').forEach(s => s.classList.add('closed'));
+  
+  let contentId;
+  if (type === 'LOT') contentId = 'lot-list-content';
+  else if (type === 'CON') contentId = 'con-list-content';
+  else if (type === 'AUC') contentId = 'auc-list-content';
+  
+  const container = document.getElementById(contentId);
+  if(!container) return;
+
+  const breadcrumb = (type === 'LOT') ? "Lot Management" : ((type === 'CON') ? "Consignors" : "Auctions");
+  updateBreadcrumbs([{name: breadcrumb, func: `loadData('${type}')`}]);
+  
+  container.innerHTML = "<div class='w3-center w3-text-grey' style='margin-top:50px'><i class='fa fa-circle-notch fa-spin'></i> Loading...</div>";
+  DATA_CACHE = [];
+  
+  const handler = (j) => { 
+      try { 
+          DATA_CACHE = JSON.parse(j); 
+          filterData(type); 
+      } catch(e) { 
+          container.innerHTML = "<div class='w3-center w3-text-red'>Error parsing data.</div>";
+          console.error(e);
+      } 
+  };
+  
+  if(type === 'LOT') google.script.run.withSuccessHandler(handler).getAllLots();
+  else if(type === 'CON') google.script.run.withSuccessHandler(handler).getAllConsignors();
+  else if(type === 'AUC') google.script.run.withSuccessHandler(handler).getAllAuctions();
+}
+
+function filterData(type) {
+  let searchId, contentId;
+  if(type === 'LOT') { searchId = 'f_lot_search'; contentId = 'lot-list-content'; }
+  else if(type === 'CON') { searchId = 'f_con_search'; contentId = 'con-list-content'; }
+  else if(type === 'AUC') { searchId = 'f_auc_search'; contentId = 'auc-list-content'; }
+
+  const searchEl = document.getElementById(searchId);
+  const container = document.getElementById(contentId);
+  
+  if (!searchEl || !container) return;
+
+  const txt = searchEl.value.toLowerCase();
+  container.innerHTML = "";
+
+  const matches = DATA_CACHE.filter(item => {
+     let str = "";
+     if(type === 'LOT') str = getLotTitle(item) + item.lotId + item.lotNumber;
+     else if(type === 'CON') str = String(item.id) + item.name;
+     else if(type === 'AUC') str = String(item.id) + item.name + item.location;
+     return str.toLowerCase().includes(txt);
+  });
+
+  if(matches.length === 0) { 
+      container.innerHTML = "<div class='w3-center w3-padding'>No items found</div>"; 
+      return; 
+  }
+
+  matches.forEach(item => {
+     const card = document.createElement('div');
+     card.className = "list-card";
+     
+     if(type === 'LOT') {
+        const name = getLotTitle(item);
+        const images = (item.image || "").split(',');
+        const mainImg = images[0] || "";
+        const img = mainImg ? `<img src="${mainImg}">` : `<i class="fa fa-image"></i>`;
+        
+        card.onclick = function() { openDetail('lot', item.lotId); };
+        
+        let auctionDisplay = "";
+        if(item.lotNumber && item.lotNumber.trim() !== "") {
+            auctionDisplay = `Auction: ${item.auction} - ${item.lotNumber}`;
+        } else if (item.auction && item.auction.trim() !== "") {
+            auctionDisplay = `Auction: ${item.auction}`;
+        }
+
+        const badgeHtml = auctionDisplay 
+            ? `<span class="card-badge" style="background:#f0f0f0;color:#555">${auctionDisplay}</span>` 
+            : "";
+
+        card.innerHTML = `<div class="card-thumb">${img}</div>
+            <div class="card-info">
+               <div class="card-badge" style="background:#2c3e50;color:white">#${item.lotId}</div>
+               ${badgeHtml}
+               <div class="card-title">${name}</div>
+            </div><i class="fa fa-chevron-right w3-text-grey"></i>`;
+     } 
+     else if (type === 'CON') {
+        const id = "C-" + String(item.id).padStart(5,'0');
+        card.onclick = function() { openDetail('con', item.id); };
+        card.innerHTML = `<div class="card-info"><div class="card-badge">${id}</div><div class="card-title">${item.name}</div><small class="w3-text-grey">${item.phone}</small></div><i class="fa fa-chevron-right w3-text-grey"></i>`;
+     }
+     else if (type === 'AUC') {
+        card.onclick = function() { openDetail('auc', item.id); };
+        card.innerHTML = `<div class="card-info"><div class="card-badge" style="background:#1a252f;color:white">Auction ${item.id}</div><div class="card-title">${item.name}</div><small class="w3-text-grey">${item.dateStart} | ${item.location}</small></div><i class="fa fa-chevron-right w3-text-grey"></i>`;
+     }
+     container.appendChild(card);
+  });
+}
+
+/* --- HELPER: GET DISPLAY TITLE --- */
+function getLotTitle(item) {
+    if (!item) return "Unknown Item";
+    const last4 = (item.vin && String(item.vin).length >= 4) ? String(item.vin).slice(-4) : (item.vin || "");
+    const identifier = last4 ? ` (${last4})` : "";
+    if (item.lotType === "Vehicle" || item.lotType === "Heavy Machinery" || (item.year && item.make)) {
+        return `${item.year || ""} ${item.make || ""} ${item.model || ""}${identifier}`.trim();
+    } else {
+        return `${item.desc || "No Description"}${identifier}`.trim();
+    }
+}
+
+/* --- DETAIL VIEWER & EDIT LOGIC (Router) --- */
+function openDetail(type, id, startTab) {
+  const overlayId = type + '-detail-overlay';
+  document.getElementById(overlayId).style.display = 'flex';
+  
+  if(type === 'lot') {
+     document.getElementById('lot-content-wrapper').style.display = 'none';
+     document.getElementById('lot-loading-indicator').style.display = 'block';
+     document.getElementById('lot-chat-box').style.display = 'none';
+     const targetTab = startTab || 'lot-info';
+     const tabBtn = document.querySelector(`button[onclick*='${targetTab}']`);
+     if(tabBtn) switchConTab(targetTab, tabBtn);
+
+     google.script.run.withSuccessHandler(json => {
+         const lot = JSON.parse(json);
+         if(lot.error) { showModal("Error", "Could not load lot."); return; }
+
+         CURRENT_ITEM = lot; 
+         
+         updateBreadcrumbs([{name: "Lot Management", func: "closeDetail('lot')"}, {name: `Inv #${lot.lotId}`, func: null}]);
+         document.getElementById('d_lotId').innerText = lot.lotId; 
+         document.getElementById('d_lotNumDisplay').innerText = lot.lotNumber || "---";
+         document.getElementById('d_head_desc').innerText = getLotTitle(lot);
+         ['desc','type','make','model','year','mileage','vin','title','reserve','payment','transporter','auction','lotNumber'].forEach(f => { 
+            if(document.getElementById('v_'+f)) document.getElementById('v_'+f).innerText = lot[f]||'-'; 
+            if(document.getElementById('i_'+f)) document.getElementById('i_'+f).value = lot[f]||''; 
+         });
+         
+         const rawImages = (lot.image || "").split(',');
+         galleryImages = rawImages.filter(url => url.trim() !== "");
+         
+         if(galleryImages.length > 0) { 
+             document.getElementById('d_img').src = galleryImages[0]; 
+             document.getElementById('d_img').style.display = 'block'; 
+             document.getElementById('d_no_img').style.display = 'none'; 
+         } else { 
+             document.getElementById('d_img').style.display = 'none'; 
+             document.getElementById('d_no_img').style.display = 'block'; 
+         }
+         
+         if (typeof renderLotImages === 'function') {
+            renderLotImages(); 
+         }
+         
+         renderNotes(lot.notes, 'lot');
+         
+         if(lot.conId) {
+             google.script.run.withSuccessHandler(json => {
+                 const conData = JSON.parse(json);
+                 if(conData.info) {
+                    const c = conData.info;
+                    document.getElementById('lc_id').innerText = c.id;
+                    document.getElementById('lc_name').innerText = c.name;
+                    document.getElementById('lc_biz').innerText = c.business || "-";
+                    document.getElementById('lc_phone').innerText = c.phone;
+                    document.getElementById('lc_email').innerText = c.email || "-";
+                    document.getElementById('lc_addr').innerText = c.address;
+                 }
+             }).getConsignorProfile(lot.conId);
+         }
+
+         document.getElementById('lot-loading-indicator').style.display = 'none';
+         document.getElementById('lot-content-wrapper').style.display = 'block';
+
+     }).getLotDetails(id);
+
+  } else if (type === 'con') {
+     const prettyId = "C-" + String(id).padStart(5,'0');
+     updateBreadcrumbs([{name: "Consignors", func: "closeDetail('con')"}, {name: prettyId, func: null}]);
+     document.getElementById('d_conId').innerText = prettyId;
+     const defaultTab = document.querySelector('#con-detail-form .tab-btn');
+     if(defaultTab) switchConTab('con-info', defaultTab);
+     document.getElementById('con-chat-box').style.display = 'none';
+     document.getElementById('con-tab-content-container').style.display = 'none';
+     document.getElementById('con-loading-indicator').style.display = 'block';
+     document.getElementById('con-error-msg').style.display = 'none';
+     google.script.run.withSuccessHandler(j => {
+        const data = JSON.parse(j);
+        CURRENT_ITEM = data.info;
+        ['name','phone','email','address'].forEach(f => { document.getElementById('cv_'+f).innerText = CURRENT_ITEM[f]||'-'; document.getElementById('ci_'+f).value = CURRENT_ITEM[f]||''; });
+        const rcptBody = document.getElementById('con-rcpt-list'); rcptBody.innerHTML = (data.receipts.length ? "" : "<tr><td>No receipts</td></tr>");
+        data.receipts.forEach(r => rcptBody.innerHTML += `<tr><td>${new Date(r.date).toLocaleDateString()}</td><td><a href="${r.url}" target="_blank">View</a></td></tr>`);
+        const lotBody = document.getElementById('con-lot-list'); lotBody.innerHTML = (data.lots.length ? "" : "<tr><td>No lots</td></tr>");
+        data.lots.forEach(l => {
+            const title = getLotTitle(l);
+            lotBody.innerHTML += `<tr><td>${l.lotId}</td><td>${l.lotNumber}</td><td>${title}</td><td>${l.status}</td></tr>`;
+        });
+        renderNotes(CURRENT_ITEM.notes, 'con');
+        document.getElementById('con-loading-indicator').style.display = 'none';
+        document.getElementById('con-tab-content-container').style.display = 'block';
+     }).getConsignorProfile(id);
+  } else if (type === 'auc') {
+     document.getElementById('d_aucId').innerText = id;
+     updateBreadcrumbs([{name: "Auctions", func: "closeDetail('auc')"}, {name: `Auction ${id}`, func: null}]);
+     document.getElementById('auc-tab-content-container').style.display = 'none';
+     document.getElementById('auc-loading-indicator').style.display = 'block';
+     const defaultTab = document.querySelector('#auc-detail-overlay .tab-btn');
+     if(defaultTab) switchConTab('auc-info', defaultTab);
+     google.script.run.withSuccessHandler(j => {
+         const data = JSON.parse(j);
+         CURRENT_ITEM = data.info;
+         ['name','location','dateStart','dateEnd','desc'].forEach(f => {
+             document.getElementById('av_'+f).innerText = CURRENT_ITEM[f]||'-';
+             document.getElementById('ai_'+f).value = CURRENT_ITEM[f]||'';
+         });
+         const lotBody = document.getElementById('auc-lot-list'); lotBody.innerHTML = "";
+         if(data.lots.length === 0) lotBody.innerHTML = "<tr><td colspan='3'>No lots assigned</td></tr>";
+         data.lots.forEach(l => {
+             const title = getLotTitle(l);
+             lotBody.innerHTML += `<tr><td>${l.lotId}</td><td>${l.lotNumber}</td><td>${title}</td><td>${l.status}</td></tr>`;
+         });
+         const conBody = document.getElementById('auc-con-list'); conBody.innerHTML = "";
+         if(data.consignors.length === 0) conBody.innerHTML = "<tr><td colspan='3'>No consignors</td></tr>";
+         data.consignors.forEach(c => conBody.innerHTML += `<tr><td>C-${c.id}</td><td>${c.name}</td><td>${c.phone}</td></tr>`);
+         document.getElementById('auc-loading-indicator').style.display = 'none';
+         document.getElementById('auc-tab-content-container').style.display = 'block';
+     }).getAuctionProfile(id);
+  }
+}
+
+function closeDetail(type) {
+   document.getElementById(type + '-detail-overlay').style.display = 'none';
+   let parent = 'LOT';
+   if(type === 'con') parent = 'CON';
+   if(type === 'auc') parent = 'AUC';
+   updateBreadcrumbs([{name: (type==='lot'?"Lot Management": (type==='con'?"Consignors":"Auctions")), func: `loadData('${parent}')`}]);
+}
+
+/* --- EDIT MODE & DIRTY CHECKING HELPERS --- */
+function checkForChanges(type) {
+    if(!CURRENT_ITEM) return false;
+    let hasChange = false;
+    if(type === 'lot') {
+        ['desc','type','make','model','year','mileage','vin','title','reserve','payment','transporter','lotNumber'].forEach(f => {
+            const oldV = String(CURRENT_ITEM[f] || "").trim();
+            const newV = String(document.getElementById('i_'+f).value).trim();
+            if(oldV !== newV) hasChange = true;
+        });
+    } else if (type === 'con') {
+        ['name','phone','email','address'].forEach(f => {
+            const oldV = String(CURRENT_ITEM[f] || "").trim();
+            const newV = String(document.getElementById('ci_'+f).value).trim();
+            if(oldV !== newV) hasChange = true;
+        });
+    } else if (type === 'auc') {
+        ['name','location','dateStart','dateEnd','desc'].forEach(f => {
+            const oldV = String(CURRENT_ITEM[f] || "").trim();
+            const newV = String(document.getElementById('ai_'+f).value).trim();
+            if(oldV !== newV) hasChange = true;
+        });
+    }
+    return hasChange;
+}
+
+function handleBackClick(type) {
+    const isEditing = document.querySelector(
+        type === 'lot' ? '#detail-form.editing' : 
+        (type === 'con' ? '#con-info-form.editing' : '#auc-info-form.editing')
+    );
+    if (isEditing) {
+        if (checkForChanges(type)) {
+            showModal("Unsaved Changes", "Any changes will not be saved. Are you sure?", function() { exitEditMode(type); });
+        } else {
+            exitEditMode(type);
+        }
+    } else {
+        closeDetail(type);
+    }
+}
+
+function exitEditMode(type) {
+    let form, btnEdit, btnBack;
+    if(type === 'lot') {
+        form = document.getElementById('detail-form');
+        btnEdit = document.getElementById('btn-edit');
+        btnBack = document.getElementById('btn-back-lot');
+        ['desc','type','make','model','year','mileage','vin','title','reserve','payment','transporter','lotNumber'].forEach(f => {
+            document.getElementById('i_'+f).value = CURRENT_ITEM[f] || "";
+        });
+        btnEdit.innerHTML = "<i class='fa fa-pencil'></i> Edit Lot";
+    } else if (type === 'con') {
+        form = document.getElementById('con-info-form');
+        btnEdit = document.getElementById('btn-con-edit');
+        btnBack = document.getElementById('btn-back-con');
+        ['name','phone','email','address'].forEach(f => {
+            document.getElementById('ci_'+f).value = CURRENT_ITEM[f] || "";
+        });
+        btnEdit.innerHTML = "<i class='fa fa-pencil'></i> Edit Profile";
+    } else if (type === 'auc') {
+        form = document.getElementById('auc-info-form');
+        btnEdit = document.getElementById('btn-auc-edit');
+        btnBack = document.getElementById('btn-back-auc');
+        ['name','location','dateStart','dateEnd','desc'].forEach(f => {
+            document.getElementById('ai_'+f).value = CURRENT_ITEM[f] || "";
+        });
+        btnEdit.innerHTML = "<i class='fa fa-pencil'></i> Edit Auction";
+    }
+    
+    if(form) form.classList.remove('editing');
+    
+    if(btnEdit) {
+        btnEdit.className = "w3-button w3-custom-accent w3-round";
+    }
+    
+    if(btnBack) {
+        btnBack.innerText = "Back";
+        btnBack.className = "w3-button w3-white w3-border w3-round";
+    }
+}
+
+/* --- SHARED DETAIL LOGIC --- */
+function toggleChat(type) { document.getElementById(type + '-chat-box').style.display = (document.getElementById(type + '-chat-box').style.display === 'flex') ? 'none' : 'flex'; }
+function renderNotes(json, type) { let msgs = []; try { msgs = JSON.parse(json); } catch(e){} const feed = document.getElementById(type + '-chat-feed'); feed.innerHTML = msgs.length ? '' : '<div style="text-align:center;color:#ccc;margin-top:20px">No notes.</div>'; msgs.forEach(m => { const isSystem = String(m.text).startsWith("[SYSTEM]"); const contentClass = isSystem ? "system-note" : "note-text"; feed.innerHTML += `<div class="note-row"><div class="note-meta"><span>${m.user || "Unknown"}</span><span>${m.time}</span></div><div class="${contentClass}">${m.text}</div></div>`; }); feed.scrollTop = feed.scrollHeight; }
+function sendNote(type) { const inp = document.getElementById(type + '-chat-inp'); const txt = inp.value; if (!txt) return; inp.value = ""; const feed = document.getElementById(type + '-chat-feed'); const tempUser = CURRENT_USER ? CURRENT_USER.username : "You"; feed.innerHTML += `<div class="note-row" style="opacity:0.6"><div class="note-meta"><span>${tempUser}</span><span>Now</span></div><div class="note-text">${txt}</div></div>`; feed.scrollTop = feed.scrollHeight; const activeUser = CURRENT_USER ? CURRENT_USER.username : "Unknown"; if (type === 'lot') { google.script.run.withSuccessHandler(n => { CURRENT_ITEM.notes = n; renderNotes(n, 'lot'); }).addLotNote(CURRENT_ITEM.lotId, txt, activeUser); } else { google.script.run.withSuccessHandler(n => { CURRENT_ITEM.notes = n; renderNotes(n, 'con'); }).addConsignorNote(CURRENT_ITEM.id, txt, activeUser); } }
+function switchConTab(tabId, btn) { document.querySelectorAll('.con-tab-content').forEach(e=>e.classList.remove('active')); document.getElementById(tabId).classList.add('active'); document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); }
+function loadUserList() { if(!CURRENT_USER) return; const tbody = document.getElementById('user-table-body'); tbody.innerHTML = "<tr><td colspan='2'><i class='fa fa-spinner fa-spin'></i> Loading...</td></tr>"; google.script.run.withSuccessHandler(json => { const users = JSON.parse(json); tbody.innerHTML = ""; users.forEach(u => { tbody.innerHTML += `<tr><td>${u.username}</td><td>${u.permissions}</td></tr>`; }); }).getUserList(CURRENT_USER.username); }
+function submitNewUser() { if(!CURRENT_USER) return; const u = document.getElementById('new_u_name').value; const p = document.getElementById('new_u_pass').value; const perms = []; document.querySelectorAll('.perm-chk:checked').forEach(c => perms.push(c.value)); if(!u || !p || perms.length === 0) { showModal("Validation", "Please fill out all fields."); return; } const btn = document.getElementById('btn-create-user'); btn.disabled = true; btn.innerText = "Creating..."; google.script.run.withSuccessHandler(res => { showModal("System", res); document.getElementById('new_u_name').value = ""; document.getElementById('new_u_pass').value = ""; document.querySelectorAll('.perm-chk').forEach(c => c.checked = false); btn.disabled = false; btn.innerText = "Create Account"; loadUserList(); }).withFailureHandler(err => { showModal("Error", err.message); btn.disabled = false; btn.innerText = "Create Account"; }).createAccount(CURRENT_USER.username, u, p, perms); }
+</script>
