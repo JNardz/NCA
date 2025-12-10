@@ -14,11 +14,15 @@ const CONFIG = {
   RECEIPT: {
     CELL_NUM: "A1", CELL_DATE: "G1", CELL_NAME: "A3", CELL_PHONE: "F3", CELL_ADDR: "A5",
     START_ROW: 8, MAX_ROW: 42,
-    COL_DESC: 1, COL_NOTES: 6, COL_RESERVE: 7, COL_TITLE: 8
+    COL_DESC: 1, COL_NOTES: 6, COL_RESERVE: 7, COL_TITLE: 8,
+    // Signature Cells
+    CELL_SIGN_NAME: "A50",
+    CELL_SIGN_IMAGE_ROW: 53,
+    CELL_SIGN_IMAGE_COL: 1 // Column A
   },
 
   
-  LABEL: {
+LABEL: {
     CELL_HEADER: "B1", 
     CELL_CON: "A4",    
     CELL_INV: "C4",    
@@ -36,7 +40,7 @@ const CONFIG = {
     "Vehicle": {
       fields: ["year", "make", "model", "vin", "color", "run_condition", "title"],
       
-      photos: ["Front Corner", "VIN Tag", "Odometer"],
+photos: ["Front Corner", "VIN Tag", "Odometer"],
       tasks: []
     },
     "Serialized Item": {

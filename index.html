@@ -10,6 +10,25 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <?!= include('Styles'); ?>
+
+    <style>
+        /* Signature Pad Responsive Height */
+        .sig-box {
+            border: 2px dashed #ccc;
+            background: #fafafa;
+            touch-action: none; /* Prevents scrolling while signing */
+            position: relative;
+            width: 100%;
+            height: 200px; /* Desktop Height */
+            border-radius: 4px;
+        }
+
+        @media (max-width: 600px) {
+            .sig-box {
+                height: 150px; /* Mobile Height */
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -261,14 +280,32 @@
 
                     <div id="rx-step-3" class="intake-step">
                         <div class="success-banner"><i class="fa fa-check-circle"></i> <b>Intake Saved Successfully!</b></div>
+
+                        <div class="w3-card w3-white w3-padding w3-margin-top" style="max-width:600px; margin:0 auto;">
+                            <h4 style="color:#2c3e50; border-bottom:1px solid #eee; padding-bottom:10px;">Consignor/Agent Signature</h4>
+
+                            <label>Printed Name</label>
+                            <input id="sign_name_input" class="w3-input w3-border w3-round w3-margin-bottom" placeholder="Enter Full Name">
+
+                            <label>Signature</label>
+                            <div class="sig-box">
+                                <canvas id="sig-canvas" style="width:100%; height:100%; display:block;"></canvas>
+                            </div>
+                            <div class="w3-small w3-text-grey w3-margin-top w3-margin-bottom" style="display:flex; justify-content:space-between; align-items:center">
+                                <span>Sign above using mouse or touchscreen</span>
+                                <button class="w3-button w3-tiny w3-red w3-round w3-hover-dark-red" onclick="clearSignature()"><i class="fa fa-eraser"></i> Clear</button>
+                            </div>
+                        </div>
+
                         <div class="w3-center w3-padding-32">
-                            <p>Would you like to print a receipt for this consignor?</p>
-                            <button id="rcpt-link-btn" class="w3-button w3-custom-accent w3-xlarge w3-round w3-hover-green" onclick="printReceipt()"><i class="fa fa-print"></i> Print Receipt</button>
+                            <p class="w3-text-grey">Once signed, generate the receipt below:</p>
+                            <button id="rcpt-link-btn" class="w3-button w3-custom-accent w3-xlarge w3-round w3-hover-green" onclick="printReceipt()"><i class="fa fa-print"></i> Save & Print Receipt</button>
                             <br><br>
                             <button id="lbl-link-btn" class="w3-button w3-blue-grey w3-xlarge w3-round w3-hover-blue" onclick="printBatchLabels()"><i class="fa fa-barcode"></i> Print All Labels</button>
                             <br><br>
                             <div id="print-loading" style="display:none; color:#777"><i class="fa fa-spinner fa-spin"></i> Generating Documents...</div>
                         </div>
+
                         <div class="w3-center w3-margin-top no-print" style="padding:20px; border-top:1px solid #ddd">
                             <button class="w3-button w3-white w3-border w3-round" onclick="finishIntake()"><i class="fa fa-check"></i> Done (Return to Dashboard)</button>
                         </div>

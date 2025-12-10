@@ -240,6 +240,21 @@ function createReceiptSheet(data) {
        newSheet.getRange(currentRow, CONFIG.RECEIPT.COL_RESERVE).setValue(item.reserve).setNumberFormat('$#,##0').setBackground("#4b0000").setFontColor("white").setFontWeight("bold");
     }
   });
+  // INSERT SIGNATURE AND NAME
+  if(data.signatureName) {
+      newSheet.getRange(CONFIG.RECEIPT.CELL_SIGN_NAME).setValue(data.signatureName);
+  }
+  if(data.signatureImage) {
+      try {
+          var base64 = data.signatureImage.split(',')[1];
+          var decoded = Utilities.base64Decode(base64);
+          var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
+          newSheet.insertImage(blob, CONFIG.RECEIPT.CELL_SIGN_IMAGE_COL, CONFIG.RECEIPT.CELL_SIGN_IMAGE_ROW);
+      } catch(e) {
+          console.error("Sig error: " + e);
+      }
+  }
+
   SpreadsheetApp.flush(); 
   const pdfUrl = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=pdf&gid=" + newSheet.getSheetId() + "&size=letter&portrait=true&fitw=true&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&attachment=false";
   if (dbRcpt) { dbRcpt.appendRow(["RCPT-" + timestamp, data.consignorId, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"), pdfUrl, sheetName]);
