@@ -1,34 +1,91 @@
 <script>
-/* ==================================================
-   CONSIGNOR MANAGEMENT LOGIC
-   ================================================== */
-function openCreateConsignor(source) { document.getElementById('new_con_source').value = source; ['new_con_name', 'new_con_biz', 'new_con_phone', 'new_con_email', 'new_con_addr'].forEach(id => document.getElementById(id).value = ""); document.getElementById('con-create-modal').style.display = 'flex'; }
-function submitNewConsignor() { const data = { name: document.getElementById('new_con_name').value, businessName: document.getElementById('new_con_biz').value, phone: document.getElementById('new_con_phone').value, email: document.getElementById('new_con_email').value, address: document.getElementById('new_con_addr').value, user: CURRENT_USER ? CURRENT_USER.username : "Guest" }; if(!data.name) { showModal("Validation", "Name is required"); return; } document.getElementById('btn-save-con').innerText = "Saving..."; google.script.run.withSuccessHandler(res => { document.getElementById('con-create-modal').style.display = 'none'; document.getElementById('btn-save-con').innerText = "Save & Select"; if(res.success) { ALL_CONSIGNORS.push({id: res.id, name: res.name, phone: data.phone, address: data.address}); const source = document.getElementById('new_con_source').value; if(source === 'receiving') { selectConsignor({id: res.id, name: res.name, phone: data.phone, address: data.address}); } else { loadData('CON'); } } }).createNewConsignor(data); }
-function toggleConEdit() {
-   const form = document.getElementById('con-info-form'); 
-   const btn = document.getElementById('btn-con-edit');
-   const btnBack = document.getElementById('btn-back-con');
-   if(form.classList.contains('editing')) {
-      btn.innerText = "Saving...";
-      const u = { name: document.getElementById('ci_name').value, phone: document.getElementById('ci_phone').value, email: document.getElementById('ci_email').value, address: document.getElementById('ci_address').value };
-      const finishConSave = () => { 
-          google.script.run.withSuccessHandler(res => { 
-              showModal("Saved", res); 
-              Object.assign(CURRENT_ITEM, u); 
-              exitEditMode('con'); 
-              openDetail('con', CURRENT_ITEM.id); 
-              filterData('CON'); 
-          }).saveConsignorChanges(CURRENT_ITEM.id, u); 
-      };
-      finishConSave();
-   } else { 
-       form.classList.add('editing'); 
-       btn.className = "w3-button w3-green w3-round"; 
-       btn.innerHTML = "<i class='fa fa-save'></i> Save"; 
-       btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
-       btnBack.className = "w3-button w3-red w3-border w3-round";
-   }
-}
-function toggleConChat(show) { const box = document.getElementById('con-chat-box'); if (show === true) box.style.display = 'flex'; else if (show === false) box.style.display = 'none'; else box.style.display = (box.style.display === 'flex') ? 'none' : 'flex'; }
-function sendConNote() { sendNote('con'); }
+    /* ==================================================
+       CONSIGNOR MANAGEMENT LOGIC
+       ================================================== */
+    function openCreateConsignor(source) {
+        document.getElementById('new_con_source').value = source;
+        ['new_con_name', 'new_con_biz', 'new_con_phone', 'new_con_email', 'new_con_addr'].forEach(id => document.getElementById(id).value = "");
+        document.getElementById('con-create-modal').style.display = 'flex';
+    }
+
+    function submitNewConsignor() {
+        const data = {
+            name: document.getElementById('new_con_name').value,
+            businessName: document.getElementById('new_con_biz').value,
+            phone: document.getElementById('new_con_phone').value,
+            email: document.getElementById('new_con_email').value,
+            address: document.getElementById('new_con_addr').value,
+            user: CURRENT_USER ? CURRENT_USER.username : "Guest"
+        };
+        if (!data.name) {
+            showModal("Validation", "Name is required");
+            return;
+        }
+        document.getElementById('btn-save-con').innerText = "Saving...";
+        google.script.run.withSuccessHandler(res => {
+            document.getElementById('con-create-modal').style.display = 'none';
+            document.getElementById('btn-save-con').innerText = "Save & Select";
+            if (res.success) {
+                ALL_CONSIGNORS.push({
+                    id: res.id,
+                    name: res.name,
+                    phone: data.phone,
+                    address: data.address
+                });
+                const source = document.getElementById('new_con_source').value;
+                if (source === 'receiving') {
+                    selectConsignor({
+                        id: res.id,
+                        name: res.name,
+                        phone: data.phone,
+                        address: data.address
+                    });
+                } else {
+                    loadData('CON');
+                }
+            }
+        }).createNewConsignor(data);
+    }
+
+    function toggleConEdit() {
+        const form = document.getElementById('con-info-form');
+        const btn = document.getElementById('btn-con-edit');
+        const btnBack = document.getElementById('btn-back-con');
+        if (form.classList.contains('editing')) {
+            btn.innerText = "Saving...";
+            const u = {
+                name: document.getElementById('ci_name').value,
+                phone: document.getElementById('ci_phone').value,
+                email: document.getElementById('ci_email').value,
+                address: document.getElementById('ci_address').value
+            };
+            const finishConSave = () => {
+                google.script.run.withSuccessHandler(res => {
+                    showModal("Saved", res);
+                    Object.assign(CURRENT_ITEM, u);
+                    exitEditMode('con');
+                    openDetail('con', CURRENT_ITEM.id);
+                    filterData('CON');
+                }).saveConsignorChanges(CURRENT_ITEM.id, u);
+            };
+            finishConSave();
+        } else {
+            form.classList.add('editing');
+            btn.className = "w3-button w3-green w3-round";
+            btn.innerHTML = "<i class='fa fa-save'></i> Save";
+            btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
+            btnBack.className = "w3-button w3-red w3-border w3-round";
+        }
+    }
+
+    function toggleConChat(show) {
+        const box = document.getElementById('con-chat-box');
+        if (show === true) box.style.display = 'flex';
+        else if (show === false) box.style.display = 'none';
+        else box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function sendConNote() {
+        sendNote('con');
+    }
 </script>

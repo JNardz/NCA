@@ -1,30 +1,80 @@
 <script>
-/* ==================================================
-   AUCTION MANAGEMENT LOGIC
-   ================================================== */
-function openCreateAucModal() { document.getElementById('auc-create-overlay').style.display = 'flex'; document.getElementById('new_auc_id').value = "Loading..."; document.getElementById('new_auc_display_id').innerText = "..."; document.getElementById('new_auc_name').value = ""; document.getElementById('new_auc_start').value = ""; document.getElementById('new_auc_end').value = ""; document.getElementById('new_auc_desc').value = ""; document.getElementById('btn-create-auc').disabled = true; google.script.run.withSuccessHandler(nextId => { document.getElementById('new_auc_id').value = nextId; document.getElementById('new_auc_display_id').innerText = nextId; document.getElementById('btn-create-auc').disabled = false; }).getNextAuctionId(); }
-function closeCreateAuc() { document.getElementById('auc-create-overlay').style.display = 'none'; }
-function submitNewAuctionForm() { const data = { id: document.getElementById('new_auc_id').value, name: document.getElementById('new_auc_name').value, dateStart: document.getElementById('new_auc_start').value, dateEnd: document.getElementById('new_auc_end').value, location: document.getElementById('new_auc_loc').value, desc: document.getElementById('new_auc_desc').value }; if(!data.name || !data.dateStart) { showModal("Validation", "Name and Start Date are required."); return; } document.getElementById('btn-create-auc').innerText = "Creating..."; document.getElementById('btn-create-auc').disabled = true; google.script.run.withSuccessHandler(res => { closeCreateAuc(); document.getElementById('btn-create-auc').innerText = "Create Auction"; showModal("Success", "Auction Created"); loadData('AUC'); }).withFailureHandler(e => { document.getElementById('btn-create-auc').innerText = "Create Auction"; document.getElementById('btn-create-auc').disabled = false; showModal("Error", e.message); }).submitNewAuction(data); }
-function toggleAucEdit() {
-   const form = document.getElementById('auc-info-form'); 
-   const btn = document.getElementById('btn-auc-edit');
-   const btnBack = document.getElementById('btn-back-auc');
-   if(form.classList.contains('editing')) {
-      btn.innerText = "Saving...";
-      const u = { name: document.getElementById('ai_name').value, location: document.getElementById('ai_location').value, dateStart: document.getElementById('ai_dateStart').value, dateEnd: document.getElementById('ai_dateEnd').value, desc: document.getElementById('ai_desc').value };
-      google.script.run.withSuccessHandler(res => { 
-          showModal("Saved", res); 
-          Object.assign(CURRENT_ITEM, u); 
-          exitEditMode('auc'); 
-          openDetail('auc', CURRENT_ITEM.id); 
-          filterData('AUC'); 
-      }).saveAuctionChanges(CURRENT_ITEM.id, u);
-   } else { 
-       form.classList.add('editing'); 
-       btn.className = "w3-button w3-green w3-round"; 
-       btn.innerHTML = "<i class='fa fa-save'></i> Save Changes"; 
-       btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
-       btnBack.className = "w3-button w3-red w3-border w3-round";
-   }
-}
+    /* ==================================================
+       AUCTION MANAGEMENT LOGIC
+       ================================================== */
+    function openCreateAucModal() {
+        document.getElementById('auc-create-overlay').style.display = 'flex';
+        document.getElementById('new_auc_id').value = "Loading...";
+        document.getElementById('new_auc_display_id').innerText = "...";
+        document.getElementById('new_auc_name').value = "";
+        document.getElementById('new_auc_start').value = "";
+        document.getElementById('new_auc_end').value = "";
+        document.getElementById('new_auc_desc').value = "";
+        document.getElementById('btn-create-auc').disabled = true;
+        google.script.run.withSuccessHandler(nextId => {
+            document.getElementById('new_auc_id').value = nextId;
+            document.getElementById('new_auc_display_id').innerText = nextId;
+            document.getElementById('btn-create-auc').disabled = false;
+        }).getNextAuctionId();
+    }
+
+    function closeCreateAuc() {
+        document.getElementById('auc-create-overlay').style.display = 'none';
+    }
+
+    function submitNewAuctionForm() {
+        const data = {
+            id: document.getElementById('new_auc_id').value,
+            name: document.getElementById('new_auc_name').value,
+            dateStart: document.getElementById('new_auc_start').value,
+            dateEnd: document.getElementById('new_auc_end').value,
+            location: document.getElementById('new_auc_loc').value,
+            desc: document.getElementById('new_auc_desc').value
+        };
+        if (!data.name || !data.dateStart) {
+            showModal("Validation", "Name and Start Date are required.");
+            return;
+        }
+        document.getElementById('btn-create-auc').innerText = "Creating...";
+        document.getElementById('btn-create-auc').disabled = true;
+        google.script.run.withSuccessHandler(res => {
+            closeCreateAuc();
+            document.getElementById('btn-create-auc').innerText = "Create Auction";
+            showModal("Success", "Auction Created");
+            loadData('AUC');
+        }).withFailureHandler(e => {
+            document.getElementById('btn-create-auc').innerText = "Create Auction";
+            document.getElementById('btn-create-auc').disabled = false;
+            showModal("Error", e.message);
+        }).submitNewAuction(data);
+    }
+
+    function toggleAucEdit() {
+        const form = document.getElementById('auc-info-form');
+        const btn = document.getElementById('btn-auc-edit');
+        const btnBack = document.getElementById('btn-back-auc');
+        if (form.classList.contains('editing')) {
+            btn.innerText = "Saving...";
+            const u = {
+                name: document.getElementById('ai_name').value,
+                location: document.getElementById('ai_location').value,
+                dateStart: document.getElementById('ai_dateStart').value,
+                dateEnd: document.getElementById('ai_dateEnd').value,
+                desc: document.getElementById('ai_desc').value
+            };
+            google.script.run.withSuccessHandler(res => {
+                showModal("Saved", res);
+                Object.assign(CURRENT_ITEM, u);
+                exitEditMode('auc');
+                openDetail('auc', CURRENT_ITEM.id);
+                filterData('AUC');
+            }).saveAuctionChanges(CURRENT_ITEM.id, u);
+        } else {
+            form.classList.add('editing');
+            btn.className = "w3-button w3-green w3-round";
+            btn.innerHTML = "<i class='fa fa-save'></i> Save Changes";
+            btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
+            btnBack.className = "w3-button w3-red w3-border w3-round";
+        }
+    }
 </script>

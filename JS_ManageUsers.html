@@ -1,7 +1,45 @@
-    <script>
-/* ==================================================
-   USER MANAGEMENT LOGIC
-   ================================================== */
-function loadUserList() { if(!CURRENT_USER) return; const tbody = document.getElementById('user-table-body'); tbody.innerHTML = "<tr><td colspan='2'><i class='fa fa-spinner fa-spin'></i> Loading...</td></tr>"; google.script.run.withSuccessHandler(json => { const users = JSON.parse(json); tbody.innerHTML = ""; users.forEach(u => { tbody.innerHTML += `<tr><td>${u.username}</td><td>${u.permissions}</td></tr>`; }); }).getUserList(CURRENT_USER.username); }
-function submitNewUser() { if(!CURRENT_USER) return; const u = document.getElementById('new_u_name').value; const p = document.getElementById('new_u_pass').value; const perms = []; document.querySelectorAll('.perm-chk:checked').forEach(c => perms.push(c.value)); if(!u || !p || perms.length === 0) { showModal("Validation", "Please fill out all fields."); return; } const btn = document.getElementById('btn-create-user'); btn.disabled = true; btn.innerText = "Creating..."; google.script.run.withSuccessHandler(res => { showModal("System", res); document.getElementById('new_u_name').value = ""; document.getElementById('new_u_pass').value = ""; document.querySelectorAll('.perm-chk').forEach(c => c.checked = false); btn.disabled = false; btn.innerText = "Create Account"; loadUserList(); }).withFailureHandler(err => { showModal("Error", err.message); btn.disabled = false; btn.innerText = "Create Account"; }).createAccount(CURRENT_USER.username, u, p, perms); }
+<script>
+    /* ==================================================
+       USER MANAGEMENT LOGIC
+       ================================================== */
+    function loadUserList() {
+        if (!CURRENT_USER) return;
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = "<tr><td colspan='2'><i class='fa fa-spinner fa-spin'></i> Loading...</td></tr>";
+        google.script.run.withSuccessHandler(json => {
+            const users = JSON.parse(json);
+            tbody.innerHTML = "";
+            users.forEach(u => {
+                tbody.innerHTML += `<tr><td>${u.username}</td><td>${u.permissions}</td></tr>`;
+            });
+        }).getUserList(CURRENT_USER.username);
+    }
+
+    function submitNewUser() {
+        if (!CURRENT_USER) return;
+        const u = document.getElementById('new_u_name').value;
+        const p = document.getElementById('new_u_pass').value;
+        const perms = [];
+        document.querySelectorAll('.perm-chk:checked').forEach(c => perms.push(c.value));
+        if (!u || !p || perms.length === 0) {
+            showModal("Validation", "Please fill out all fields.");
+            return;
+        }
+        const btn = document.getElementById('btn-create-user');
+        btn.disabled = true;
+        btn.innerText = "Creating...";
+        google.script.run.withSuccessHandler(res => {
+            showModal("System", res);
+            document.getElementById('new_u_name').value = "";
+            document.getElementById('new_u_pass').value = "";
+            document.querySelectorAll('.perm-chk').forEach(c => c.checked = false);
+            btn.disabled = false;
+            btn.innerText = "Create Account";
+            loadUserList();
+        }).withFailureHandler(err => {
+            showModal("Error", err.message);
+            btn.disabled = false;
+            btn.innerText = "Create Account";
+        }).createAccount(CURRENT_USER.username, u, p, perms);
+    }
 </script>

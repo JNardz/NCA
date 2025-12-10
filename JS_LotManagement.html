@@ -1,301 +1,328 @@
 <script>
-/* ==================================================
-   LOT MANAGEMENT LOGIC
-   ================================================== */
-function startScanner() {
-    document.getElementById('scanner-overlay').style.display = 'flex';
-    setTimeout(() => {
-        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-    }, 100);
-}
-
-function onScanSuccess(decodedText, decodedResult) {
-    stopScanner();
-    const searchInput = document.getElementById('f_lot_search');
-    if(searchInput) {
-        searchInput.value = decodedText;
-        filterData('LOT');
+    /* ==================================================
+       LOT MANAGEMENT LOGIC
+       ================================================== */
+    function startScanner() {
+        document.getElementById('scanner-overlay').style.display = 'flex';
+        setTimeout(() => {
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+                fps: 10,
+                qrbox: {
+                    width: 250,
+                    height: 250
+                }
+            }, false);
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }, 100);
     }
-}
 
-function onScanFailure(error) {}
-
-function stopScanner() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear().then(() => {
-            document.getElementById('scanner-overlay').style.display = 'none';
-            html5QrcodeScanner = null;
-        }).catch(err => {
-            console.error(err);
-            document.getElementById('scanner-overlay').style.display = 'none';
-        });
-    } else {
-        document.getElementById('scanner-overlay').style.display = 'none';
-    }
-}
-
-function toggleEdit() {
-   const form = document.getElementById('detail-form'); 
-   const btn = document.getElementById('btn-edit');
-   const btnBack = document.getElementById('btn-back-lot');
-   if(form.classList.contains('editing')) {
-      btn.innerHTML = "Saving...";
-      const u = {}; 
-      ['desc','type','make','model','year','mileage','vin','title','reserve','payment','transporter','lotNumber'].forEach(f => { u[f] = document.getElementById('i_'+f).value; });
-      const finishSave = () => { 
-          google.script.run.withSuccessHandler(res => { 
-              showModal("Saved", res); 
-              Object.assign(CURRENT_ITEM, u); 
-              exitEditMode('lot'); 
-              openDetail('lot', CURRENT_ITEM.lotId); 
-              filterData('LOT'); 
-          }).saveLotChanges(CURRENT_ITEM.lotId, u); 
-      };
-      finishSave();
-   } else { 
-       form.classList.add('editing'); 
-       btn.className = "w3-button w3-green w3-round"; 
-       btn.innerHTML = "<i class='fa fa-save'></i> Save"; 
-       btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
-       btnBack.className = "w3-button w3-red w3-border w3-round";
-   }
-}
-
-function printLabel(lotId) { const newWindow = window.open('', '_blank'); if (newWindow) newWindow.document.write('<html><head><title>Generating Label...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating Label...</h3><p>Please wait...</p></body></html>'); google.script.run.withSuccessHandler(res => { if (newWindow) newWindow.location.href = res.url; else window.open(res.url, '_blank'); setTimeout(() => { google.script.run.deleteReceiptSheet(res.sheetName); }, 60000); }).withFailureHandler(e => { if(newWindow) newWindow.close(); showModal("Error", "Failed: " + e.message); }).createLabelSheet([lotId]); }
-
-/* --- NEW IMAGE HANDLING --- */
-function triggerLotImageUpload() {
-   document.getElementById('lot-img-upload').click();
-}
-
-function processLotImageUpload() {
-   const input = document.getElementById('lot-img-upload');
-   if (input.files.length === 0) return;
-   
-   showModal("Uploading", "Uploading " + input.files.length + " images... Please wait.");
-   
-   const uploads = Array.from(input.files).map(file => {
-      return new Promise((resolve, reject) => {
-         const reader = new FileReader();
-         reader.onload = function(e) {
-            const base64 = e.target.result;
-            google.script.run.withSuccessHandler(url => {
-                resolve(url);
-            }).withFailureHandler(err => reject(err)).uploadIntakeImage(base64);
-         };
-         reader.readAsDataURL(file);
-      });
-   });
-   
-   Promise.all(uploads).then(urls => {
-      google.script.run.withSuccessHandler(res => {
-         closeModal();
-         showModal("Success", "Images uploaded.");
-         
-         // 1. Force Refresh Data Cache for List View
-         loadData('LOT'); 
-
-         // 2. Fetch Fresh Detailed Data for Overlay
-         google.script.run.withSuccessHandler(json => {
-             const freshLot = JSON.parse(json);
-             CURRENT_ITEM = freshLot; // Update global state
-             
-             // 3. Update Gallery Images Array
-             const rawImages = (freshLot.image || "").split(',');
-             galleryImages = rawImages.filter(url => url.trim() !== "");
-             
-             // 4. Re-render Gallery Grid
-             renderLotImages();
-
-         }).getLotDetails(CURRENT_ITEM.lotId);
-
-      }).addImagesToLot(CURRENT_ITEM.lotId, urls);
-   }).catch(e => {
-      closeModal();
-      showModal("Error", "Upload failed: " + e);
-   });
-   
-   input.value = "";
-}
-
-/* --- IMAGE GRID RENDERER & DRAG/DROP --- */
-let dragSrcEl = null;
-
-function renderLotImages() {
-    const grid = document.getElementById('lot-img-grid');
-    grid.innerHTML = "";
-    
-    galleryImages.forEach((url, index) => {
-        if(!url.trim()) return;
-        
-        // Convert to Thumbnail for grid display if it's a Drive URL
-        let displayUrl = url;
-        if(url.includes("drive.google.com")) {
-             const idMatch = url.match(/id=([^&]+)/);
-             if(idMatch) {
-                 displayUrl = "https://drive.google.com/thumbnail?id=" + idMatch[1] + "&sz=w400";
-             }
+    function onScanSuccess(decodedText, decodedResult) {
+        stopScanner();
+        const searchInput = document.getElementById('f_lot_search');
+        if (searchInput) {
+            searchInput.value = decodedText;
+            filterData('LOT');
         }
-        
-        const div = document.createElement('div');
-        div.className = "img-square";
-        div.draggable = true;
-        div.style.position = "relative";
-        
-        div.innerHTML = `
+    }
+
+    function onScanFailure(error) { }
+
+    function stopScanner() {
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear().then(() => {
+                document.getElementById('scanner-overlay').style.display = 'none';
+                html5QrcodeScanner = null;
+            }).catch(err => {
+                console.error(err);
+                document.getElementById('scanner-overlay').style.display = 'none';
+            });
+        } else {
+            document.getElementById('scanner-overlay').style.display = 'none';
+        }
+    }
+
+    function toggleEdit() {
+        const form = document.getElementById('detail-form');
+        const btn = document.getElementById('btn-edit');
+        const btnBack = document.getElementById('btn-back-lot');
+        if (form.classList.contains('editing')) {
+            btn.innerHTML = "Saving...";
+            const u = {};
+            ['desc', 'type', 'make', 'model', 'year', 'mileage', 'vin', 'title', 'reserve', 'payment', 'transporter', 'lotNumber'].forEach(f => {
+                u[f] = document.getElementById('i_' + f).value;
+            });
+            const finishSave = () => {
+                google.script.run.withSuccessHandler(res => {
+                    showModal("Saved", res);
+                    Object.assign(CURRENT_ITEM, u);
+                    exitEditMode('lot');
+                    openDetail('lot', CURRENT_ITEM.lotId);
+                    filterData('LOT');
+                }).saveLotChanges(CURRENT_ITEM.lotId, u);
+            };
+            finishSave();
+        } else {
+            form.classList.add('editing');
+            btn.className = "w3-button w3-green w3-round";
+            btn.innerHTML = "<i class='fa fa-save'></i> Save";
+            btnBack.innerHTML = "<i class='fa fa-times'></i> Cancel";
+            btnBack.className = "w3-button w3-red w3-border w3-round";
+        }
+    }
+
+    function printLabel(lotId) {
+        const newWindow = window.open('', '_blank');
+        if (newWindow) newWindow.document.write('<html><head><title>Generating Label...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating Label...</h3><p>Please wait...</p></body></html>');
+        google.script.run.withSuccessHandler(res => {
+            if (newWindow) newWindow.location.href = res.url;
+            else window.open(res.url, '_blank');
+            setTimeout(() => {
+                google.script.run.deleteReceiptSheet(res.sheetName);
+            }, 60000);
+        }).withFailureHandler(e => {
+            if (newWindow) newWindow.close();
+            showModal("Error", "Failed: " + e.message);
+        }).createLabelSheet([lotId]);
+    }
+
+    /* --- NEW IMAGE HANDLING --- */
+    function triggerLotImageUpload() {
+        document.getElementById('lot-img-upload').click();
+    }
+
+    function processLotImageUpload() {
+        const input = document.getElementById('lot-img-upload');
+        if (input.files.length === 0) return;
+
+        showModal("Uploading", "Uploading " + input.files.length + " images... Please wait.");
+
+        const uploads = Array.from(input.files).map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const base64 = e.target.result;
+                    google.script.run.withSuccessHandler(url => {
+                        resolve(url);
+                    }).withFailureHandler(err => reject(err)).uploadIntakeImage(base64);
+                };
+                reader.readAsDataURL(file);
+            });
+        });
+
+        Promise.all(uploads).then(urls => {
+            google.script.run.withSuccessHandler(res => {
+                closeModal();
+                showModal("Success", "Images uploaded.");
+
+                // 1. Force Refresh Data Cache for List View
+                loadData('LOT');
+
+                // 2. Fetch Fresh Detailed Data for Overlay
+                google.script.run.withSuccessHandler(json => {
+                    const freshLot = JSON.parse(json);
+                    CURRENT_ITEM = freshLot; // Update global state
+
+                    // 3. Update Gallery Images Array
+                    const rawImages = (freshLot.image || "").split(',');
+                    galleryImages = rawImages.filter(url => url.trim() !== "");
+
+                    // 4. Re-render Gallery Grid
+                    renderLotImages();
+
+                }).getLotDetails(CURRENT_ITEM.lotId);
+
+            }).addImagesToLot(CURRENT_ITEM.lotId, urls);
+        }).catch(e => {
+            closeModal();
+            showModal("Error", "Upload failed: " + e);
+        });
+
+        input.value = "";
+    }
+
+    /* --- IMAGE GRID RENDERER & DRAG/DROP --- */
+    let dragSrcEl = null;
+
+    function renderLotImages() {
+        const grid = document.getElementById('lot-img-grid');
+        grid.innerHTML = "";
+
+        galleryImages.forEach((url, index) => {
+            if (!url.trim()) return;
+
+            // Convert to Thumbnail for grid display if it's a Drive URL
+            let displayUrl = url;
+            if (url.includes("drive.google.com")) {
+                const idMatch = url.match(/id=([^&]+)/);
+                if (idMatch) {
+                    displayUrl = "https://drive.google.com/thumbnail?id=" + idMatch[1] + "&sz=w400";
+                }
+            }
+
+            const div = document.createElement('div');
+            div.className = "img-square";
+            div.draggable = true;
+            div.style.position = "relative";
+
+            div.innerHTML = `
             <img src="${displayUrl}" onclick="openGallery(${index})">
             <div class="img-delete-btn" onclick="deleteLotImage(${index}, event)">×</div>
         `;
-        
-        // Drag Events
-        div.addEventListener('dragstart', function(e) {
-            dragSrcEl = this;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', this.innerHTML);
-            this.style.opacity = '0.4';
-            this.dataset.index = index;
+
+            // Drag Events
+            div.addEventListener('dragstart', function (e) {
+                dragSrcEl = this;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', this.innerHTML);
+                this.style.opacity = '0.4';
+                this.dataset.index = index;
+            });
+
+            div.addEventListener('dragover', function (e) {
+                if (e.preventDefault) e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                return false;
+            });
+
+            div.addEventListener('drop', function (e) {
+                if (e.stopPropagation) e.stopPropagation();
+                if (dragSrcEl !== this) {
+                    const oldIdx = parseInt(dragSrcEl.dataset.index);
+                    const newIdx = index;
+
+                    // Reorder array
+                    const item = galleryImages.splice(oldIdx, 1)[0];
+                    galleryImages.splice(newIdx, 0, item);
+
+                    // Render & Save
+                    renderLotImages();
+                    saveImageOrder();
+                }
+                return false;
+            });
+
+            div.addEventListener('dragend', function (e) {
+                this.style.opacity = '1';
+            });
+
+            grid.appendChild(div);
         });
 
-        div.addEventListener('dragover', function(e) {
-            if (e.preventDefault) e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            return false;
-        });
-
-        div.addEventListener('drop', function(e) {
-            if (e.stopPropagation) e.stopPropagation();
-            if (dragSrcEl !== this) {
-                const oldIdx = parseInt(dragSrcEl.dataset.index);
-                const newIdx = index;
-                
-                // Reorder array
-                const item = galleryImages.splice(oldIdx, 1)[0];
-                galleryImages.splice(newIdx, 0, item);
-                
-                // Render & Save
-                renderLotImages();
-                saveImageOrder();
+        // Also update the main preview image to be the first one
+        if (galleryImages.length > 0) {
+            // Use thumbnail for preview to ensure loading
+            let previewUrl = galleryImages[0];
+            if (previewUrl.includes("drive.google.com")) {
+                const idMatch = previewUrl.match(/id=([^&]+)/);
+                if (idMatch) {
+                    previewUrl = "https://drive.google.com/thumbnail?id=" + idMatch[1] + "&sz=w400";
+                }
             }
-            return false;
-        });
 
-        div.addEventListener('dragend', function(e) {
-            this.style.opacity = '1';
-        });
-
-        grid.appendChild(div);
-    });
-    
-    // Also update the main preview image to be the first one
-    if(galleryImages.length > 0) {
-        // Use thumbnail for preview to ensure loading
-        let previewUrl = galleryImages[0];
-        if(previewUrl.includes("drive.google.com")) {
-             const idMatch = previewUrl.match(/id=([^&]+)/);
-             if(idMatch) {
-                 previewUrl = "https://drive.google.com/thumbnail?id=" + idMatch[1] + "&sz=w400";
-             }
+            document.getElementById('d_img').src = previewUrl;
+            document.getElementById('d_img').style.display = 'block';
+            document.getElementById('d_no_img').style.display = 'none';
+        } else {
+            document.getElementById('d_img').style.display = 'none';
+            document.getElementById('d_no_img').style.display = 'block';
         }
-
-        document.getElementById('d_img').src = previewUrl;
-        document.getElementById('d_img').style.display = 'block';
-        document.getElementById('d_no_img').style.display = 'none';
-    } else {
-        document.getElementById('d_img').style.display = 'none';
-        document.getElementById('d_no_img').style.display = 'block';
     }
-}
 
-function deleteLotImage(index, e) {
-    if(e) e.stopPropagation(); // Prevent gallery opening
-    
-    showModal("Confirm Delete", "Are you sure you want to delete this image?", function() {
-        galleryImages.splice(index, 1);
-        renderLotImages();
-        saveImageOrder();
-    });
-}
+    function deleteLotImage(index, e) {
+        if (e) e.stopPropagation(); // Prevent gallery opening
 
-function saveImageOrder() {
-    // Save current galleryImages array to backend
-    if(!CURRENT_ITEM) return;
-    
-    google.script.run.withSuccessHandler(res => {
-        // Updated
-        if(CURRENT_ITEM) CURRENT_ITEM.image = galleryImages.join(',');
-        loadData('LOT'); // Update the thumbnails in the list view
-    }).saveLotImages(CURRENT_ITEM.lotId, galleryImages);
-}
-
-/* --- GALLERY LOGIC --- */
-let galleryImages = [];
-let currentGalleryIndex = 0;
-
-function openGallery(index) {
-    if (!CURRENT_ITEM) return;
-    
-    if (galleryImages.length === 0) return; 
-
-    currentGalleryIndex = index;
-    updateGalleryView();
-    
-    document.getElementById('image-gallery-overlay').style.display = 'flex';
-}
-
-function closeGallery() {
-    document.getElementById('image-gallery-overlay').style.display = 'none';
-}
-
-function updateGalleryView() {
-    const imgEl = document.getElementById('gallery-main-img');
-    const counterEl = document.getElementById('gallery-counter');
-    
-    if (galleryImages.length > 0) {
-        // Use HD URL for Gallery Overlay
-        imgEl.src = galleryImages[currentGalleryIndex];
-        counterEl.innerText = (currentGalleryIndex + 1) + " / " + galleryImages.length;
+        showModal("Confirm Delete", "Are you sure you want to delete this image?", function () {
+            galleryImages.splice(index, 1);
+            renderLotImages();
+            saveImageOrder();
+        });
     }
-}
 
-function nextImage() {
-    if (galleryImages.length <= 1) return;
-    currentGalleryIndex++;
-    if (currentGalleryIndex >= galleryImages.length) currentGalleryIndex = 0;
-    updateGalleryView();
-}
+    function saveImageOrder() {
+        // Save current galleryImages array to backend
+        if (!CURRENT_ITEM) return;
 
-function prevImage() {
-    if (galleryImages.length <= 1) return;
-    currentGalleryIndex--;
-    if (currentGalleryIndex < 0) currentGalleryIndex = galleryImages.length - 1;
-    updateGalleryView();
-}
-
-function openHDImage() {
-    if (galleryImages.length > 0) {
-        window.open(galleryImages[currentGalleryIndex], '_blank');
+        google.script.run.withSuccessHandler(res => {
+            // Updated
+            if (CURRENT_ITEM) CURRENT_ITEM.image = galleryImages.join(',');
+            loadData('LOT'); // Update the thumbnails in the list view
+        }).saveLotImages(CURRENT_ITEM.lotId, galleryImages);
     }
-}
+
+    /* --- GALLERY LOGIC --- */
+    let galleryImages = [];
+    let currentGalleryIndex = 0;
+
+    function openGallery(index) {
+        if (!CURRENT_ITEM) return;
+
+        if (galleryImages.length === 0) return;
+
+        currentGalleryIndex = index;
+        updateGalleryView();
+
+        document.getElementById('image-gallery-overlay').style.display = 'flex';
+    }
+
+    function closeGallery() {
+        document.getElementById('image-gallery-overlay').style.display = 'none';
+    }
+
+    function updateGalleryView() {
+        const imgEl = document.getElementById('gallery-main-img');
+        const counterEl = document.getElementById('gallery-counter');
+
+        if (galleryImages.length > 0) {
+            // Use HD URL for Gallery Overlay
+            imgEl.src = galleryImages[currentGalleryIndex];
+            counterEl.innerText = (currentGalleryIndex + 1) + " / " + galleryImages.length;
+        }
+    }
+
+    function nextImage() {
+        if (galleryImages.length <= 1) return;
+        currentGalleryIndex++;
+        if (currentGalleryIndex >= galleryImages.length) currentGalleryIndex = 0;
+        updateGalleryView();
+    }
+
+    function prevImage() {
+        if (galleryImages.length <= 1) return;
+        currentGalleryIndex--;
+        if (currentGalleryIndex < 0) currentGalleryIndex = galleryImages.length - 1;
+        updateGalleryView();
+    }
+
+    function openHDImage() {
+        if (galleryImages.length > 0) {
+            window.open(galleryImages[currentGalleryIndex], '_blank');
+        }
+    }
 </script>
 <style>
-/* Additional Styles for Drag and Drop & Delete */
-.img-delete-btn {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: red;
-    color: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    text-align: center;
-    line-height: 18px;
-    font-weight: bold;
-    cursor: pointer;
-    font-size: 14px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-}
-.img-delete-btn:hover { background: darkred; }
-.img-square[draggable="true"] { cursor: move; }
+    /* Additional Styles for Drag and Drop & Delete */
+    .img-delete-btn {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: red;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        text-align: center;
+        line-height: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+        .img-delete-btn:hover {
+            background: darkred;
+        }
+
+    .img-square[draggable="true"] {
+        cursor: move;
+    }
 </style>

@@ -45,10 +45,14 @@
             const auctions = JSON.parse(json);
             const openAuctions = auctions.filter(a => String(a.status).toLowerCase() === 'open' || String(a.status).toLowerCase() === 'active');
             sel.innerHTML = "<option value='' disabled selected>Select Auction...</option>";
-            openAuctions.forEach(a => { sel.innerHTML += `<option value="${a.id}">${a.name} (${a.id})</option>`; });
+            openAuctions.forEach(a => {
+                sel.innerHTML += `<option value="${a.id}">${a.name} (${a.id})</option>`;
+            });
             if (CURRENT_USER && CURRENT_USER.lastAuction) {
                 const exists = openAuctions.find(a => String(a.id) === String(CURRENT_USER.lastAuction));
-                if (exists) { sel.value = CURRENT_USER.lastAuction; }
+                if (exists) {
+                    sel.value = CURRENT_USER.lastAuction;
+                }
             }
             sel.onchange = function () {
                 if (CURRENT_USER) {
@@ -72,14 +76,44 @@
         goToStep1();
     }
 
-    function goToStep1() { switchStep('rx-step-1'); updateBreadcrumbs([{ name: "Receiving", func: "openReceiving()" }, { name: "Identify Consignor", func: null }]); }
-    function goToStep2() { switchStep('rx-step-2'); document.getElementById('summ-con-name').innerText = `Consignor: ${document.getElementById('in_selected_name').value}`; updateBreadcrumbs([{ name: "Receiving", func: "openReceiving()" }, { name: "Identify Consignor", func: "goToStep1()" }, { name: "Build Inventory", func: null }]); }
-    function switchStep(stepId) { document.querySelectorAll('.intake-step').forEach(el => el.classList.remove('active')); document.getElementById(stepId).classList.add('active'); }
+    function goToStep1() {
+        switchStep('rx-step-1');
+        updateBreadcrumbs([{
+            name: "Receiving",
+            func: "openReceiving()"
+        }, {
+            name: "Identify Consignor",
+            func: null
+        }]);
+    }
+
+    function goToStep2() {
+        switchStep('rx-step-2');
+        document.getElementById('summ-con-name').innerText = `Consignor: ${document.getElementById('in_selected_name').value}`;
+        updateBreadcrumbs([{
+            name: "Receiving",
+            func: "openReceiving()"
+        }, {
+            name: "Identify Consignor",
+            func: "goToStep1()"
+        }, {
+            name: "Build Inventory",
+            func: null
+        }]);
+    }
+
+    function switchStep(stepId) {
+        document.querySelectorAll('.intake-step').forEach(el => el.classList.remove('active'));
+        document.getElementById(stepId).classList.add('active');
+    }
 
     function filterConsignors() {
         const inputVal = document.getElementById('in_search').value.toLowerCase();
         const isNumber = /^\d+$/.test(inputVal);
-        if (inputVal.length < 2 && !isNumber) { document.getElementById('consignor-results').style.display = 'none'; return; }
+        if (inputVal.length < 2 && !isNumber) {
+            document.getElementById('consignor-results').style.display = 'none';
+            return;
+        }
         const matches = ALL_CONSIGNORS.filter(c => {
             const term = inputVal;
             const termDigits = term.replace(/\D/g, '');
@@ -92,10 +126,17 @@
     function renderConsignors(list) {
         const container = document.getElementById('consignor-results');
         container.innerHTML = "";
-        if (list.length === 0) { container.style.display = 'none'; return; }
+        if (list.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
         container.style.display = 'block';
         list.forEach(c => {
-            const div = document.createElement('div'); div.className = "result-row"; div.onclick = () => { selectConsignor(c); };
+            const div = document.createElement('div');
+            div.className = "result-row";
+            div.onclick = () => {
+                selectConsignor(c);
+            };
             const bizDisplay = c.business ? `<br><small class="w3-text-blue-grey"><i class="fa fa-briefcase"></i> ${c.business}</small>` : "";
             div.innerHTML = `<div class="result-main">${c.name} <span class="w3-tag w3-tiny w3-text-custom-accent">${c.id}</span>${bizDisplay}</div><div class="result-sub">${c.phone} | ${c.address}</div>`;
             container.appendChild(div);
@@ -121,7 +162,10 @@
 
     function handleIdInput(el) {
         const val = el.value.replace(/\D/g, '');
-        if (val.length < 1) { document.getElementById('consignor-results').style.display = 'none'; return; }
+        if (val.length < 1) {
+            document.getElementById('consignor-results').style.display = 'none';
+            return;
+        }
         const matches = ALL_CONSIGNORS.filter(c => String(c.id).includes(val));
         renderConsignors(matches);
     }
@@ -156,34 +200,204 @@
         const img1 = document.getElementById('url-1').value;
         const img2 = document.getElementById('url-2').value;
         const img3 = document.getElementById('url-3').value;
-        if (!type) { showModal("Validation", "Select Lot Type"); return; }
-        if (type === 'Other' || type === 'Serialized Item') { if (!desc) { showModal("Validation", "Description is required."); return; } } else { if (!year || !make) { showModal("Validation", "Year and Make are required."); return; } }
-        const item = { lotType: type, year, make, model, vin, title, reserve, desc, notes: note, color, img1, img2, img3, tasks: LOT_CONFIG[type].tasks };
-        CART_ITEMS.push(item); renderCart(); clearCartForm();
+        if (!type) {
+            showModal("Validation", "Select Lot Type");
+            return;
+        }
+        if (type === 'Other' || type === 'Serialized Item') {
+            if (!desc) {
+                showModal("Validation", "Description is required.");
+                return;
+            }
+        } else {
+            if (!year || !make) {
+                showModal("Validation", "Year and Make are required.");
+                return;
+            }
+        }
+        const item = {
+            lotType: type,
+            year,
+            make,
+            model,
+            vin,
+            title,
+            reserve,
+            desc,
+            notes: note,
+            color,
+            img1,
+            img2,
+            img3,
+            tasks: LOT_CONFIG[type].tasks
+        };
+        CART_ITEMS.push(item);
+        renderCart();
+        clearCartForm();
     }
 
     function renderCart() {
         const list = document.getElementById('cart-list');
         list.innerHTML = "";
         document.getElementById('cart-count').innerText = CART_ITEMS.length + " Items";
-        if (CART_ITEMS.length === 0) { list.innerHTML = "<div class='w3-center w3-text-grey w3-padding'>No items added yet.</div>"; return; }
+        if (CART_ITEMS.length === 0) {
+            list.innerHTML = "<div class='w3-center w3-text-grey w3-padding'>No items added yet.</div>";
+            return;
+        }
         CART_ITEMS.forEach((item, idx) => {
             const fullTitle = getLotTitle(item);
             const thumbUrl = item.img1 || item.img2 || item.img3;
             const imgHtml = thumbUrl ? `<img src="${thumbUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:10px">` : "";
-            const div = document.createElement('div'); div.className = `cart-item`;
+            const div = document.createElement('div');
+            div.className = `cart-item`;
             div.innerHTML = `<div style="display:flex;align-items:center">${imgHtml}<div><div style="font-weight:bold">${fullTitle}</div><small class="w3-text-grey">${item.lotType}</small></div></div><div class="cart-actions"><i class="fa fa-trash cart-del" onclick="removeCartItem(${idx})"></i></div>`;
             list.appendChild(div);
         });
     }
 
-    function removeCartItem(idx) { showModal("Confirm Delete", "Remove this item from the list?", function () { CART_ITEMS.splice(idx, 1); renderCart(); }); }
-    function clearCartForm() { document.getElementById('cart_type').value = "";['cart_year', 'cart_make', 'cart_model', 'cart_vin', 'cart_title', 'cart_reserve', 'cart_desc', 'cart_note', 'cart_color', 'url-1', 'url-2', 'url-3'].forEach(id => document.getElementById(id).value = "");[1, 2, 3].forEach(i => { document.getElementById('prev-' + i).style.display = 'none'; document.getElementById('prev-' + i).src = ""; }); document.getElementById('dynamic-intake-fields').style.display = 'none'; }
-    function submitIntake() { const btn = document.getElementById('btn-submit-intake'); const originalText = btn.innerText; btn.innerText = "Saving..."; btn.disabled = true; const aucId = document.getElementById('in_target_auction').value; if (!aucId) { showModal("Validation", "Please select a Target Auction."); btn.innerText = originalText; btn.disabled = false; return; } const data = { consignorId: document.getElementById('in_cid').value, name: document.getElementById('in_selected_name').value, phone: document.getElementById('in_phone_hidden').value, address: document.getElementById('in_addr_hidden').value, items: CART_ITEMS, user: CURRENT_USER ? CURRENT_USER.username : "Intake", auctionId: aucId }; if (!data.name || data.items.length === 0) { showModal("Incomplete", "Enter Consignor and Items."); btn.innerText = originalText; btn.disabled = false; return; } google.script.run.withSuccessHandler(res => { btn.innerText = originalText; btn.disabled = false; if (res.success) { LAST_INTAKE_DATA = res.receiptData; switchStep('rx-step-3'); updateBreadcrumbs([{ name: "Receiving", func: "openReceiving()" }, { name: "Receipt", func: null }]); } else { showModal("Error", res.message); } }).withFailureHandler(e => { showModal("Error", e.message); btn.innerText = originalText; btn.disabled = false; }).processIntakeForm(data); }
-    function printReceipt() { if (!LAST_INTAKE_DATA) return; const newWindow = window.open('', '_blank'); if (newWindow) newWindow.document.write('<html><head><title>Generating Receipt...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating PDF...</h3><p>Please wait while we create your receipt.</p></body></html>'); document.getElementById('print-loading').style.display = 'block'; google.script.run.withSuccessHandler(res => { document.getElementById('print-loading').style.display = 'none'; LAST_RECEIPT_SHEET = res.sheetName; if (newWindow) newWindow.location.href = res.url; else window.open(res.url, '_blank'); }).withFailureHandler(e => { document.getElementById('print-loading').style.display = 'none'; if (newWindow) newWindow.close(); showModal("Error", "Failed: " + e.message); }).createReceiptSheet(LAST_INTAKE_DATA); }
-    function printBatchLabels() { if (!LAST_INTAKE_DATA || !LAST_INTAKE_DATA.items) return; const generatedIds = LAST_INTAKE_DATA.items.map(i => i.generatedId); if (generatedIds.length === 0) return; const newWindow = window.open('', '_blank'); if (newWindow) newWindow.document.write('<html><head><title>Generating Labels...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating Labels...</h3><p>Please wait...</p></body></html>'); document.getElementById('print-loading').style.display = 'block'; google.script.run.withSuccessHandler(res => { document.getElementById('print-loading').style.display = 'none'; if (newWindow) newWindow.location.href = res.url; else window.open(res.url, '_blank'); setTimeout(() => { google.script.run.deleteReceiptSheet(res.sheetName); }, 60000); }).withFailureHandler(e => { document.getElementById('print-loading').style.display = 'none'; if (newWindow) newWindow.close(); showModal("Error", "Failed: " + e.message); }).createLabelSheet(generatedIds); }
-    function finishIntake() { if (LAST_RECEIPT_SHEET) { google.script.run.deleteReceiptSheet(LAST_RECEIPT_SHEET); LAST_RECEIPT_SHEET = null; } LAST_INTAKE_DATA = null; resetIntakeFormState(); goHome(); }
+    function removeCartItem(idx) {
+        showModal("Confirm Delete", "Remove this item from the list?", function () {
+            CART_ITEMS.splice(idx, 1);
+            renderCart();
+        });
+    }
 
-    function triggerUpload(slotIdx) { activeSlot = slotIdx; document.getElementById('upload-input').click(); }
-    function processUpload() { const file = document.getElementById('upload-input').files[0]; if (!file) return; const sq = document.getElementById('sq-' + activeSlot); sq.classList.add('loading'); const reader = new FileReader(); reader.onload = function (e) { document.getElementById('prev-' + activeSlot).src = e.target.result; document.getElementById('prev-' + activeSlot).style.display = 'block'; const base64 = e.target.result; google.script.run.withSuccessHandler(url => { sq.classList.remove('loading'); if (url.startsWith("ERROR")) { showModal("Upload Error", url); return; } document.getElementById('url-' + activeSlot).value = url; }).withFailureHandler(err => { sq.classList.remove('loading'); showModal("Upload Error", "Failed"); }).uploadIntakeImage(base64); }; reader.readAsDataURL(file); document.getElementById('upload-input').value = ""; }
+    function clearCartForm() {
+        document.getElementById('cart_type').value = "";
+        ['cart_year', 'cart_make', 'cart_model', 'cart_vin', 'cart_title', 'cart_reserve', 'cart_desc', 'cart_note', 'cart_color', 'url-1', 'url-2', 'url-3'].forEach(id => document.getElementById(id).value = "");
+        [1, 2, 3].forEach(i => {
+            document.getElementById('prev-' + i).style.display = 'none';
+            document.getElementById('prev-' + i).src = "";
+        });
+        document.getElementById('dynamic-intake-fields').style.display = 'none';
+    }
+
+    function submitIntake() {
+        const btn = document.getElementById('btn-submit-intake');
+        const originalText = btn.innerText;
+        btn.innerText = "Saving...";
+        btn.disabled = true;
+        const aucId = document.getElementById('in_target_auction').value;
+        if (!aucId) {
+            showModal("Validation", "Please select a Target Auction.");
+            btn.innerText = originalText;
+            btn.disabled = false;
+            return;
+        }
+        const data = {
+            consignorId: document.getElementById('in_cid').value,
+            name: document.getElementById('in_selected_name').value,
+            phone: document.getElementById('in_phone_hidden').value,
+            address: document.getElementById('in_addr_hidden').value,
+            items: CART_ITEMS,
+            user: CURRENT_USER ? CURRENT_USER.username : "Intake",
+            auctionId: aucId
+        };
+        if (!data.name || data.items.length === 0) {
+            showModal("Incomplete", "Enter Consignor and Items.");
+            btn.innerText = originalText;
+            btn.disabled = false;
+            return;
+        }
+        google.script.run.withSuccessHandler(res => {
+            btn.innerText = originalText;
+            btn.disabled = false;
+            if (res.success) {
+                LAST_INTAKE_DATA = res.receiptData;
+                switchStep('rx-step-3');
+                updateBreadcrumbs([{
+                    name: "Receiving",
+                    func: "openReceiving()"
+                }, {
+                    name: "Receipt",
+                    func: null
+                }]);
+            } else {
+                showModal("Error", res.message);
+            }
+        }).withFailureHandler(e => {
+            showModal("Error", e.message);
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }).processIntakeForm(data);
+    }
+
+    function printReceipt() {
+        if (!LAST_INTAKE_DATA) return;
+        const newWindow = window.open('', '_blank');
+        if (newWindow) newWindow.document.write('<html><head><title>Generating Receipt...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating PDF...</h3><p>Please wait while we create your receipt.</p></body></html>');
+        document.getElementById('print-loading').style.display = 'block';
+        google.script.run.withSuccessHandler(res => {
+            document.getElementById('print-loading').style.display = 'none';
+            LAST_RECEIPT_SHEET = res.sheetName;
+            if (newWindow) newWindow.location.href = res.url;
+            else window.open(res.url, '_blank');
+        }).withFailureHandler(e => {
+            document.getElementById('print-loading').style.display = 'none';
+            if (newWindow) newWindow.close();
+            showModal("Error", "Failed: " + e.message);
+        }).createReceiptSheet(LAST_INTAKE_DATA);
+    }
+
+    function printBatchLabels() {
+        if (!LAST_INTAKE_DATA || !LAST_INTAKE_DATA.items) return;
+        const generatedIds = LAST_INTAKE_DATA.items.map(i => i.generatedId);
+        if (generatedIds.length === 0) return;
+        const newWindow = window.open('', '_blank');
+        if (newWindow) newWindow.document.write('<html><head><title>Generating Labels...</title></head><body style="font-family:sans-serif;text-align:center;padding-top:50px;"><h3>Generating Labels...</h3><p>Please wait...</p></body></html>');
+        document.getElementById('print-loading').style.display = 'block';
+        google.script.run.withSuccessHandler(res => {
+            document.getElementById('print-loading').style.display = 'none';
+            if (newWindow) newWindow.location.href = res.url;
+            else window.open(res.url, '_blank');
+            setTimeout(() => {
+                google.script.run.deleteReceiptSheet(res.sheetName);
+            }, 60000);
+        }).withFailureHandler(e => {
+            document.getElementById('print-loading').style.display = 'none';
+            if (newWindow) newWindow.close();
+            showModal("Error", "Failed: " + e.message);
+        }).createLabelSheet(generatedIds);
+    }
+
+    function finishIntake() {
+        if (LAST_RECEIPT_SHEET) {
+            google.script.run.deleteReceiptSheet(LAST_RECEIPT_SHEET);
+            LAST_RECEIPT_SHEET = null;
+        }
+        LAST_INTAKE_DATA = null;
+        resetIntakeFormState();
+        goHome();
+    }
+
+    function triggerUpload(slotIdx) {
+        activeSlot = slotIdx;
+        document.getElementById('upload-input').click();
+    }
+
+    function processUpload() {
+        const file = document.getElementById('upload-input').files[0];
+        if (!file) return;
+        const sq = document.getElementById('sq-' + activeSlot);
+        sq.classList.add('loading');
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            document.getElementById('prev-' + activeSlot).src = e.target.result;
+            document.getElementById('prev-' + activeSlot).style.display = 'block';
+            const base64 = e.target.result;
+            google.script.run.withSuccessHandler(url => {
+                sq.classList.remove('loading');
+                if (url.startsWith("ERROR")) {
+                    showModal("Upload Error", url);
+                    return;
+                }
+                document.getElementById('url-' + activeSlot).value = url;
+            }).withFailureHandler(err => {
+                sq.classList.remove('loading');
+                showModal("Upload Error", "Failed");
+            }).uploadIntakeImage(base64);
+        };
+        reader.readAsDataURL(file);
+        document.getElementById('upload-input').value = "";
+    }
 </script>
