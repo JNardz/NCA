@@ -27,6 +27,7 @@ function processIntakeForm(formData) {
 
       let invId;
       do { invId = Math.floor(Math.random() * 90000000) 
+ 
         + 10000000; } while (existingIds.has(String(invId)));
       existingIds.add(String(invId));
       
@@ -37,7 +38,8 @@ function processIntakeForm(formData) {
       
       newRows.push([
         invId, currentAuction, formData.consignorId, "", item.year, item.make, item.model, item.vin, "", 
-        item.desc, item.title, "", item.reserve, "", primaryImage, 
+        item.desc, item.title, "", item.reserve, 
+        "", primaryImage, 
         JSON.stringify(initialNotes), "Active", timestamp, lotNumber, item.lotType
       ]);
     });
@@ -115,7 +117,9 @@ function createLabelSheet(lotIds) {
         return {
           id: invData[i][0],
           aucId: invData[i][1],
-          conId: invData[i][2]
+          conId: invData[i][2],
+          vin: invData[i][7], // Index 7 is VIN
+          desc: invData[i][9] // Index 9 is Description/Item Name
         };
       }
     }
@@ -168,13 +172,16 @@ function createLabelSheet(lotIds) {
     // Prepare Data
     const headerTxt = getAuctionHeader(item.aucId);
     const conTxt = "C-" + item.conId;
-    const invTxt = "INVENTORY# " + item.id;
+    const invTxt = "INV# " + item.id;
+    const itemName = item.desc || "";
+    const vinTxt = item.vin ? "VIN/SN: " + item.vin : "";
     
     // Barcode URL (Code 128)
     const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${item.id}&scale=3&height=6`;
     // Fill Cells (Adjusting for offset)
     const colMap = { A:1, B:2, C:3, D:4, E:5, F:6, G:7 };
     const setCell = (def, val, isFormula) => {
+       if(!def) return;
        const colChar = def.charAt(0);
        const rowNum = parseInt(def.substring(1));
        const actualRow = startRow + rowNum - 1;
@@ -187,6 +194,8 @@ function createLabelSheet(lotIds) {
     setCell(CONFIG.LABEL.CELL_CON, conTxt, false);
     setCell(CONFIG.LABEL.CELL_INV, invTxt, false);
     setCell(CONFIG.LABEL.CELL_BARCODE, `=IMAGE("${barcodeUrl}")`, true);
+    setCell(CONFIG.LABEL.CELL_ITEM_NAME, itemName, false);
+    setCell(CONFIG.LABEL.CELL_VIN, vinTxt, false);
   }
 
   SpreadsheetApp.flush();
@@ -203,7 +212,6 @@ function createReceiptSheet(data) {
   
   // REMOVED FORMATTING LOGIC:
   let formattedId = data.consignorId;
-  
   let formattedPhone = String(data.phone || "").replace(/\D/g, '');
   if (formattedPhone.length === 10) formattedPhone = formattedPhone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
   const timestamp = new Date().getTime();

@@ -17,11 +17,14 @@ const CONFIG = {
     COL_DESC: 1, COL_NOTES: 6, COL_RESERVE: 7, COL_TITLE: 8
   },
 
+  
   LABEL: {
     CELL_HEADER: "B1", 
-    CELL_CON: "A3",    
-    CELL_INV: "A5",    
-    CELL_BARCODE: "C5" 
+    CELL_CON: "A4",    
+    CELL_INV: "C4",    
+    CELL_BARCODE: "C5",
+    CELL_ITEM_NAME: "A5",
+    CELL_VIN: "C6" 
   },
 
   LOT_TYPES: {
@@ -32,6 +35,7 @@ const CONFIG = {
     },
     "Vehicle": {
       fields: ["year", "make", "model", "vin", "color", "run_condition", "title"],
+      
       photos: ["Front Corner", "VIN Tag", "Odometer"],
       tasks: []
     },
