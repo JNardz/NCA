@@ -26,6 +26,14 @@
         @media (max-width: 600px) {
             .sig-box {
                 height: 150px; /* Mobile Height */
+                /* Expansion Logic: Negate the 16px parent padding to go edge-to-edge */
+                width: calc(100% + 32px);
+                margin-left: -16px;
+                margin-right: -16px;
+                /* Optional: Remove side borders and radius for a cleaner full-width look */
+                border-left: none;
+                border-right: none;
+                border-radius: 0;
             }
         }
     </style>
@@ -630,3 +638,4 @@
 
 </body>
 </html>
+}
