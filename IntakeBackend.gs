@@ -11,13 +11,11 @@ function processIntakeForm(formData) {
     if (!formData.auctionId) throw new Error("Target Auction is required.");
     
     // 2. Handle Items
-    const currentAuction = formData.auctionId; 
-    
+    const currentAuction = formData.auctionId;
     let newRows = [];
     const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy");
 
     const existingIds = new Set(dbInv.getDataRange().getValues().map(r => String(r[0])));
-
     formData.items.forEach(item => {
       const primaryImage = item.img1 || item.img2 || item.img3 || "";
       let noteText = item.notes || "";
@@ -28,7 +26,8 @@ function processIntakeForm(formData) {
       if(noteText) initialNotes.push({text: noteText, time: timestamp, user: formData.user || "Intake"});
 
       let invId;
-      do { invId = Math.floor(Math.random() * 90000000) + 10000000; } while (existingIds.has(String(invId)));
+      do { invId = Math.floor(Math.random() * 90000000) 
+        + 10000000; } while (existingIds.has(String(invId)));
       existingIds.add(String(invId));
       
       // Store ID back into item object for Frontend Label Generation
@@ -42,7 +41,6 @@ function processIntakeForm(formData) {
         JSON.stringify(initialNotes), "Active", timestamp, lotNumber, item.lotType
       ]);
     });
-
     if (newRows.length > 0) {
       dbInv.getRange(dbInv.getLastRow() + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
     } else {
@@ -54,7 +52,6 @@ function processIntakeForm(formData) {
       message: `Saved ${newRows.length} items to Auction ${currentAuction}.`,
       receiptData: formData // Now contains items with .generatedId
     };
-
   } catch (err) {
     return { success: false, message: "Database Error: " + err.message };
   }
@@ -69,7 +66,7 @@ function addImagesToLot(lotId, newUrls) {
   for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === String(lotId)) {
       // Column 15 is index 14
-      const currentImagesStr = String(data[i][14] || ""); 
+      const currentImagesStr = String(data[i][14] || "");
       let imageList = currentImagesStr ? currentImagesStr.split(',') : [];
       
       // Handle input being either array or single string
@@ -81,7 +78,6 @@ function addImagesToLot(lotId, newUrls) {
       
       // Filter empty and duplicates
       imageList = [...new Set(imageList.filter(url => url && url.trim() !== ""))];
-      
       // Save back as comma-separated string
       // getRange(row, col) -> row is i+1, col is 15 (O)
       dbInv.getRange(i + 1, 15).setValue(imageList.join(','));
@@ -105,16 +101,13 @@ function createLabelSheet(lotIds) {
   const dbAuc = ss.getSheetByName(CONFIG.SHEETS.DB_AUC);
   
   if (!template) throw new Error("Template_Label_Inventory missing.");
-  
   // 1. Fetch Data
   const invData = dbInv.getDataRange().getValues();
   const aucData = dbAuc ? dbAuc.getDataRange().getValues() : [];
-  
   // 2. Prepare Temporary Sheet
   const timestamp = new Date().getTime();
   const labelSheetName = `Labels_${timestamp}`;
   let labelSheet = template.copyTo(ss).setName(labelSheetName);
-  
   // Helper to find Item Data
   const getItem = (id) => {
     for(let i=1; i<invData.length; i++) {
@@ -128,13 +121,14 @@ function createLabelSheet(lotIds) {
     }
     return null;
   };
-
   // Helper to get Auction Date String
   const getAuctionHeader = (aucId) => {
     for(let i=1; i<aucData.length; i++) {
       if(String(aucData[i][0]) === String(aucId)) {
-        const d1 = new Date(aucData[i][2]); // Start
-        const d2 = new Date(aucData[i][3]); // End
+        const d1 = new Date(aucData[i][2]);
+        // Start
+        const d2 = new Date(aucData[i][3]);
+        // End
         const f1 = Utilities.formatDate(d1, Session.getScriptTimeZone(), "M/d");
         const f2 = Utilities.formatDate(d2, Session.getScriptTimeZone(), "M/d");
         
@@ -161,7 +155,6 @@ function createLabelSheet(lotIds) {
     if (!item) continue;
 
     let startRow = 1 + (k * (numRows + spacing));
-    
     // Copy formatting if not first item
     if (k > 0) {
       templateRange.copyTo(labelSheet.getRange(startRow, 1));
@@ -179,10 +172,8 @@ function createLabelSheet(lotIds) {
     
     // Barcode URL (Code 128)
     const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code128&text=${item.id}&scale=3&height=6`;
-    
     // Fill Cells (Adjusting for offset)
     const colMap = { A:1, B:2, C:3, D:4, E:5, F:6, G:7 };
-    
     const setCell = (def, val, isFormula) => {
        const colChar = def.charAt(0);
        const rowNum = parseInt(def.substring(1));
@@ -199,10 +190,8 @@ function createLabelSheet(lotIds) {
   }
 
   SpreadsheetApp.flush();
-  
   // 4. Export PDF
   const pdfUrl = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=pdf&gid=" + labelSheet.getSheetId() + "&size=letter&portrait=true&fitw=true&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&attachment=false";
-  
   return { url: pdfUrl, sheetName: labelSheetName };
 }
 
@@ -211,8 +200,10 @@ function createReceiptSheet(data) {
   const template = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE);
   const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
   if (!template) throw new Error("Template_Receipt missing.");
-  let formattedId = String(data.consignorId).replace(/\D/g, ''); 
-  if (formattedId) formattedId = "C-" + formattedId.padStart(5, '0');
+  
+  // REMOVED FORMATTING LOGIC:
+  let formattedId = data.consignorId;
+  
   let formattedPhone = String(data.phone || "").replace(/\D/g, '');
   if (formattedPhone.length === 10) formattedPhone = formattedPhone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
   const timestamp = new Date().getTime();
@@ -243,22 +234,27 @@ function createReceiptSheet(data) {
   });
   SpreadsheetApp.flush(); 
   const pdfUrl = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=pdf&gid=" + newSheet.getSheetId() + "&size=letter&portrait=true&fitw=true&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&attachment=false";
-  if (dbRcpt) { dbRcpt.appendRow(["RCPT-" + timestamp, data.consignorId, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"), pdfUrl, sheetName]); }
+  if (dbRcpt) { dbRcpt.appendRow(["RCPT-" + timestamp, data.consignorId, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"), pdfUrl, sheetName]);
+  }
   return { url: pdfUrl, sheetName: sheetName };
 }
 
-function deleteReceiptSheet(sheetName) { try { const ss = SpreadsheetApp.getActiveSpreadsheet(); const sheet = ss.getSheetByName(sheetName); if (sheet) ss.deleteSheet(sheet); return "Cleaned up"; } catch (e) { return "Error cleaning up: " + e.message; } }
+function deleteReceiptSheet(sheetName) { try { const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName); if (sheet) ss.deleteSheet(sheet); return "Cleaned up";
+  } catch (e) { return "Error cleaning up: " + e.message;
+  } }
 
 // UPDATED: Return High Quality View URL
 function uploadIntakeImage(data) { 
   try { 
-    const folders = DriveApp.getFoldersByName(CONFIG.FOLDER_NAME); 
+    const folders = DriveApp.getFoldersByName(CONFIG.FOLDER_NAME);
     let folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(CONFIG.FOLDER_NAME); 
     folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
-    const bytes = Utilities.base64Decode(data.substr(data.indexOf('base64,') + 7)); 
+    const bytes = Utilities.base64Decode(data.substr(data.indexOf('base64,') + 7));
     const blob = Utilities.newBlob(bytes, data.substring(5, data.indexOf(';')), "intake_" + new Date().getTime() + ".jpg"); 
-    const file = folder.createFile(blob); 
+    const file = folder.createFile(blob);
     // Return View URL
     return "https://drive.google.com/uc?export=view&id=" + file.getId(); 
-  } catch (e) { return "ERROR: " + e.toString(); } 
+  } catch (e) { return "ERROR: " + e.toString();
+  } 
 }
