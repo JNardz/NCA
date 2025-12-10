@@ -137,8 +137,18 @@
             div.onclick = () => {
                 selectConsignor(c);
             };
-            const bizDisplay = c.business ? `<br><small class="w3-text-blue-grey"><i class="fa fa-briefcase"></i> ${c.business}</small>` : "";
-            div.innerHTML = `<div class="result-main">${c.name} <span class="w3-tag w3-tiny w3-text-custom-accent">${c.id}</span>${bizDisplay}</div><div class="result-sub">${c.phone} | ${c.address}</div>`;
+
+            // Logic for Name Display
+            let dispName = c.name;
+            if (c.business) {
+                if (c.name) dispName = `${c.business} / ${c.name}`;
+                else dispName = c.business;
+            }
+
+            // ID Badge moved to left
+            const idBadge = `<span class="w3-tag w3-tiny w3-text-custom-accent" style="margin-right:8px">${c.id}</span>`;
+
+            div.innerHTML = `<div class="result-main">${idBadge}${dispName}</div><div class="result-sub">${c.phone} | ${c.address}</div>`;
             container.appendChild(div);
         });
     }
