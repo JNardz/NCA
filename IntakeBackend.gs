@@ -200,66 +200,201 @@ function createLabelSheet(lotIds) {
     return { url: pdfUrl, sheetName: labelSheetName };
 }
 
+/* ==================================================
+   NEW MODULAR RECEIPT GENERATION
+   ================================================== */
 function createReceiptSheet(data) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const template = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE);
-    const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
-    if (!template) throw new Error("Template_Receipt missing.");
 
-    // REMOVED FORMATTING LOGIC:
-    let formattedId = data.consignorId;
-    let formattedPhone = String(data.phone || "").replace(/\D/g, '');
-    if (formattedPhone.length === 10) formattedPhone = formattedPhone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
-    const timestamp = new Date().getTime();
-    const sheetName = `Rcpt_${data.consignorId}_${timestamp}`;
-    const newSheet = template.copyTo(ss).setName(sheetName);
-    newSheet.getRange(CONFIG.RECEIPT.CELL_DATE).setValue(new Date());
-    newSheet.getRange(CONFIG.RECEIPT.CELL_NUM).setValue(formattedId);
-    newSheet.getRange(CONFIG.RECEIPT.CELL_NAME).setValue(data.name);
-    newSheet.getRange(CONFIG.RECEIPT.CELL_ADDR).setValue(data.address);
-    newSheet.getRange(CONFIG.RECEIPT.CELL_PHONE).setValue(formattedPhone);
-    data.items.forEach((item, index) => {
-        const currentRow = CONFIG.RECEIPT.START_ROW + index;
-        if (currentRow > CONFIG.RECEIPT.MAX_ROW) return;
-        let parts = [];
-        if (item.lotType === "Vehicle" || item.lotType === "Heavy Machinery") {
-            parts = [item.year, item.make, item.model].filter(x => x && String(x).trim() !== "");
+    // 1. Fetch Templates
+    const tHeader = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_HEADER);
+    const tTabHead = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_TABLE_HEADER);
+    const tItem = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_ITEM);
+    const tFooter = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_FOOTER);
+    const tEnd = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_END);
+
+    if (!tHeader || !tTabHead || !tItem || !tFooter || !tEnd) {
+        throw new Error("Missing one or more Receipt Templates (HEADER, TABLEHEADER, NEWITEM, FOOTER, END).");
+    }
+
+    // 2. Determine Dimensions (Rows)
+    const hRows = tHeader.getMaxRows();
+    const thRows = tTabHead.getMaxRows();
+    const iRows = tItem.getMaxRows();
+    const fRows = tFooter.getMaxRows();
+    const eRows = tEnd.getMaxRows();
+
+    // Configuration for Page Size (Rows per Page)
+    // Adjust this based on your printed page layout needs
+    const MAX_ROWS = 44;
+
+    // 3. Logic Helper: Name Formatting
+    let headerName = data.name || "";
+    if (data.business && data.business.trim() !== "") {
+        if (data.name && data.name.trim() !== "") {
+            headerName = `${data.business} / ${data.name}`;
         } else {
-            parts = [item.desc].filter(x => x && String(x).trim() !== "");
+            headerName = data.business;
         }
-        let finalDesc = parts.join(" ");
-        if (item.vin) finalDesc += " SN/VIN: " + item.vin;
-        newSheet.getRange(currentRow, CONFIG.RECEIPT.COL_DESC).setValue(finalDesc);
-        newSheet.getRange(currentRow, CONFIG.RECEIPT.COL_NOTES).setValue(item.notes || "");
-        newSheet.getRange(currentRow, CONFIG.RECEIPT.COL_TITLE).setValue(item.title || "");
-        if (item.reserve) {
-            newSheet.getRange(currentRow, CONFIG.RECEIPT.COL_RESERVE).setValue(item.reserve).setNumberFormat('$#,##0').setBackground("#4b0000").setFontColor("white").setFontWeight("bold");
+    }
+
+    // 4. Page Simulation
+    // We simulate placing items to handle the "Move 1 item" rule before rendering.
+    let pages = [];
+    let currentPageItems = [];
+    let currentHeight = hRows + thRows; // Start position (Header + Table Header)
+
+    // A. Place Items
+    data.items.forEach(item => {
+        // Check if item fits (leaving space for footer)
+        if (currentHeight + iRows + fRows > MAX_ROWS) {
+            // Page Full -> Push and Start New
+            pages.push({ items: currentPageItems, hasEnd: false });
+            currentPageItems = [item];
+            currentHeight = hRows + thRows + iRows; // New Page starts with Headers + 1 Item
+        } else {
+            // Add to current
+            currentPageItems.push(item);
+            currentHeight += iRows;
         }
     });
-    // INSERT SIGNATURE AND NAME
-    if (data.signatureName) {
-        newSheet.getRange(CONFIG.RECEIPT.CELL_SIGN_NAME).setValue(data.signatureName);
-    }
-    if (data.signatureImage) {
-        try {
-            var base64 = data.signatureImage.split(',')[1];
-            var decoded = Utilities.base64Decode(base64);
-            var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
 
-            // UPDATED: Use CellImageBuilder to attach image inside the cell
-            var img = SpreadsheetApp.newCellImage().setSource(blob).build();
-            newSheet.getRange(CONFIG.RECEIPT.CELL_SIGN_IMAGE_ROW, CONFIG.RECEIPT.CELL_SIGN_IMAGE_COL).setValue(img);
+    // B. Place End Block
+    // Check if End Block fits on current page
+    if (currentHeight + eRows + fRows <= MAX_ROWS) {
+        pages.push({ items: currentPageItems, hasEnd: true });
+    } else {
+        // End block does NOT fit. 
+        // RULE: "If End sheet results in another page, move 1 item to last page"
 
-        } catch (e) {
-            console.error("Sig error: " + e);
+        // Check if we can pull an item from the current page to the new page
+        if (currentPageItems.length > 0) {
+            const movedItem = currentPageItems.pop(); // Remove last item
+            pages.push({ items: currentPageItems, hasEnd: false }); // Push current page
+
+            // Start new last page with Moved Item + End Block
+            pages.push({ items: [movedItem], hasEnd: true });
+        } else {
+            // Current page was already empty of items? (Unlikely)
+            pages.push({ items: currentPageItems, hasEnd: false });
+            pages.push({ items: [], hasEnd: true }); // New page, just End block
         }
     }
 
+    // 5. Render
+    const timestamp = new Date().getTime();
+    const sheetName = `Rcpt_${data.consignorId}_${timestamp}`;
+    // Copy Header to start the sheet (preserves column widths from Header Template)
+    const newSheet = tHeader.copyTo(ss).setName(sheetName);
+
+    // Clear the copied content so we can build page by page
+    newSheet.clearContents();
+    newSheet.clearFormats();
+
+    let writeRow = 1;
+    const totalPages = pages.length;
+
+    pages.forEach((page, index) => {
+        const pageNum = index + 1;
+
+        // --- A. HEADER (Top of Page) ---
+        tHeader.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
+
+        // Fill Header Data
+        newSheet.getRange(writeRow, 1).setValue(data.consignorId); // A1
+        newSheet.getRange(writeRow, 7).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy")); // G1
+        newSheet.getRange(writeRow + 2, 1).setValue(headerName);   // A3
+        newSheet.getRange(writeRow + 2, 6).setValue(data.phone);   // F3
+        newSheet.getRange(writeRow + 4, 1).setValue(data.address); // A5
+
+        writeRow += hRows;
+
+        // --- B. TABLE HEADER ---
+        tTabHead.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
+        writeRow += thRows;
+
+        // --- C. ITEMS ---
+        page.items.forEach(item => {
+            tItem.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
+
+            // Fill Item Data
+            // A1: Title Status
+            newSheet.getRange(writeRow, 1).setValue(item.title || "");
+            // B1: Inv ID
+            newSheet.getRange(writeRow, 2).setValue("#" + item.generatedId);
+            // C1: Item Name
+            newSheet.getRange(writeRow, 3).setValue(item.desc || "");
+            // D1: VIN
+            const vinText = item.vin ? `VIN/SN: ${item.vin}` : "";
+            newSheet.getRange(writeRow, 4).setValue(vinText);
+            // E1: Reserve
+            if (item.reserve) {
+                newSheet.getRange(writeRow, 5).setValue(item.reserve);
+            }
+
+            writeRow += iRows;
+        });
+
+        // --- D. END BLOCK (If applicable) ---
+        // The End sheet needs to be "Right above the Footer".
+        // We calculate the Footer position first to ensure it is at the bottom.
+
+        const pageStartRow = ((pageNum - 1) * MAX_ROWS) + 1;
+        const footerStartRow = pageStartRow + MAX_ROWS - fRows;
+
+        if (page.hasEnd) {
+            // Place End Block immediately above the Footer
+            const endBlockRow = footerStartRow - eRows;
+            tEnd.getDataRange().copyTo(newSheet.getRange(endBlockRow, 1));
+
+            // Fill End Data
+            // F4: Owner Name
+            newSheet.getRange(endBlockRow + 3, 6).setValue(data.signatureName);
+            // F7: Received By
+            newSheet.getRange(endBlockRow + 6, 6).setValue(data.user);
+
+            // A3: Signature Image (Embedded in Cell)
+            if (data.signatureImage) {
+                try {
+                    var base64 = data.signatureImage.split(',')[1];
+                    var decoded = Utilities.base64Decode(base64);
+                    var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
+                    var img = SpreadsheetApp.newCellImage().setSource(blob).build();
+                    newSheet.getRange(endBlockRow + 2, 1).setValue(img);
+                } catch (e) {
+                    console.error("Sig Error", e);
+                }
+            }
+        }
+
+        // --- E. FOOTER (Bottom of Page) ---
+        tFooter.getDataRange().copyTo(newSheet.getRange(footerStartRow, 1));
+
+        // Fill Footer Data
+        // G1: Page X / Y
+        newSheet.getRange(footerStartRow, 7).setValue(`Page: ${pageNum} / ${totalPages}`);
+
+        // Advance writeRow to the start of the next page
+        writeRow = pageStartRow + MAX_ROWS;
+    });
+
     SpreadsheetApp.flush();
+
+    // 6. Export PDF
     const pdfUrl = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=pdf&gid=" + newSheet.getSheetId() + "&size=letter&portrait=true&fitw=true&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&attachment=false";
+
+    // Log to DB
+    const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
     if (dbRcpt) {
-        dbRcpt.appendRow(["RCPT-" + timestamp, data.consignorId, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"), pdfUrl, sheetName]);
+        dbRcpt.appendRow([
+            "RCPT-" + timestamp,
+            data.consignorId,
+            Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"),
+            pdfUrl,
+            sheetName
+        ]);
     }
+
     return { url: pdfUrl, sheetName: sheetName };
 }
 
