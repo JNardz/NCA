@@ -2,28 +2,6 @@
     /* ==================================================
        RECEIVING LOGIC
        ================================================== */
-    const LOT_CONFIG = {
-        "Heavy Machinery": {
-            ymm: true, vin: true, color: false, title: false, desc: false,
-            photos: ["Front", "Tag/Serial", "Hour Meter"],
-            tasks: []
-        },
-        "Vehicle": {
-            ymm: true, vin: true, color: true, title: true, desc: false,
-            photos: ["Front Corner", "VIN Tag", "Odometer"],
-            tasks: []
-        },
-        "Serialized Item": {
-            ymm: false, vin: true, color: false, title: false, desc: true,
-            photos: ["Overall", "Serial Number", "Detail"],
-            tasks: []
-        },
-        "Other": {
-            ymm: false, vin: false, color: false, title: false, desc: true,
-            photos: ["Overall", "Detail 1", "Detail 2"],
-            tasks: ["Catalog Photos"]
-        }
-    };
 
     let ALL_CONSIGNORS = [];
     let CART_ITEMS = [];
@@ -65,6 +43,8 @@
 
     function resetIntakeFormState() {
         document.getElementById('in_cid').value = "";
+        document.getElementById('in_selected_name').value = "";
+        document.getElementById('in_biz_hidden').value = "";
         document.getElementById('in_search').value = "";
         document.getElementById('in_phone_hidden').value = "";
         document.getElementById('in_addr_hidden').value = "";
@@ -89,7 +69,19 @@
 
     function goToStep2() {
         switchStep('rx-step-2');
-        document.getElementById('summ-con-name').innerText = `Consignor: ${document.getElementById('in_selected_name').value}`;
+
+        // FORMAT HEADER: [ID] [BUSINESS] / [NAME]
+        const name = document.getElementById('in_selected_name').value;
+        const biz = document.getElementById('in_biz_hidden').value;
+        const id = document.getElementById('in_cid').value;
+
+        let display = "";
+        if (biz && name) display = `${biz} / ${name}`;
+        else display = biz || name;
+
+        document.getElementById('summ-con-name').innerHTML =
+            `Consignor: <span class="w3-tag w3-tiny w3-custom-accent" style="margin-right:5px">${id}</span><b>${display}</b>`;
+
         updateBreadcrumbs([{
             name: "Receiving",
             func: "openReceiving()"
@@ -156,6 +148,7 @@
     function selectConsignor(c) {
         document.getElementById('in_cid').value = c.id;
         document.getElementById('in_selected_name').value = c.name;
+        document.getElementById('in_biz_hidden').value = c.business || ""; // Store Biz Name
         document.getElementById('in_phone_hidden').value = c.phone;
         document.getElementById('in_addr_hidden').value = c.address;
         document.getElementById('disp_c_id').innerText = c.id;
@@ -180,66 +173,36 @@
         renderConsignors(matches);
     }
 
-    function updateIntakeFormUI() {
-        const type = document.getElementById('cart_type').value;
-        const config = LOT_CONFIG[type];
-        if (!config) return;
-        document.getElementById('dynamic-intake-fields').style.display = 'block';
-        document.querySelectorAll('.field-group-ymm').forEach(el => el.style.display = config.ymm ? 'block' : 'none');
-        document.querySelector('.field-group-vin').style.display = config.vin ? 'block' : 'none';
-        document.querySelector('.field-group-color').style.display = config.color ? 'block' : 'none';
-        document.querySelector('.field-group-title').style.display = config.title ? 'block' : 'none';
-        document.querySelector('.field-group-desc').style.display = config.desc ? 'block' : 'none';
-        document.getElementById('lbl_vin').innerText = (type === 'Serialized Item') ? "Serial Number" : "VIN / Serial";
-        document.getElementById('lbl-img-1').innerText = config.photos[0];
-        document.getElementById('lbl-img-2').innerText = config.photos[1];
-        document.getElementById('lbl-img-3').innerText = config.photos[2];
-    }
-
     function addToCart() {
-        const type = document.getElementById('cart_type').value;
-        const year = document.getElementById('cart_year').value;
-        const make = document.getElementById('cart_make').value;
         const desc = document.getElementById('cart_desc').value;
-        const model = document.getElementById('cart_model').value;
         const vin = document.getElementById('cart_vin').value;
         const title = document.getElementById('cart_title').value;
         const reserve = document.getElementById('cart_reserve').value;
         const note = document.getElementById('cart_note').value;
-        const color = document.getElementById('cart_color').value;
         const img1 = document.getElementById('url-1').value;
         const img2 = document.getElementById('url-2').value;
         const img3 = document.getElementById('url-3').value;
-        if (!type) {
-            showModal("Validation", "Select Lot Type");
+
+        if (!desc) {
+            showModal("Validation", "Item Name is required.");
             return;
         }
-        if (type === 'Other' || type === 'Serialized Item') {
-            if (!desc) {
-                showModal("Validation", "Description is required.");
-                return;
-            }
-        } else {
-            if (!year || !make) {
-                showModal("Validation", "Year and Make are required.");
-                return;
-            }
-        }
+
         const item = {
-            lotType: type,
-            year,
-            make,
-            model,
-            vin,
-            title,
-            reserve,
-            desc,
+            lotType: "Item", // Generic type
+            year: "",
+            make: "",
+            model: "",
+            vin: vin,
+            title: title,
+            reserve: reserve,
+            desc: desc,
             notes: note,
-            color,
-            img1,
-            img2,
-            img3,
-            tasks: LOT_CONFIG[type].tasks
+            color: "",
+            img1: img1,
+            img2: img2,
+            img3: img3,
+            tasks: []
         };
         CART_ITEMS.push(item);
         renderCart();
@@ -256,11 +219,10 @@
         }
         CART_ITEMS.forEach((item, idx) => {
             const fullTitle = getLotTitle(item);
-            const thumbUrl = item.img1 || item.img2 || item.img3;
-            const imgHtml = thumbUrl ? `<img src="${thumbUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:10px">` : "";
+            // Thumbnails removed
             const div = document.createElement('div');
             div.className = `cart-item`;
-            div.innerHTML = `<div style="display:flex;align-items:center">${imgHtml}<div><div style="font-weight:bold">${fullTitle}</div><small class="w3-text-grey">${item.lotType}</small></div></div><div class="cart-actions"><i class="fa fa-trash cart-del" onclick="removeCartItem(${idx})"></i></div>`;
+            div.innerHTML = `<div style="display:flex;align-items:center"><div><div style="font-weight:bold">${fullTitle}</div><small class="w3-text-grey">${item.notes || ""}</small></div></div><div class="cart-actions"><i class="fa fa-trash cart-del" onclick="removeCartItem(${idx})"></i></div>`;
             list.appendChild(div);
         });
     }
@@ -273,13 +235,11 @@
     }
 
     function clearCartForm() {
-        document.getElementById('cart_type').value = "";
-        ['cart_year', 'cart_make', 'cart_model', 'cart_vin', 'cart_title', 'cart_reserve', 'cart_desc', 'cart_note', 'cart_color', 'url-1', 'url-2', 'url-3'].forEach(id => document.getElementById(id).value = "");
+        ['cart_desc', 'cart_vin', 'cart_title', 'cart_reserve', 'cart_note', 'url-1', 'url-2', 'url-3'].forEach(id => document.getElementById(id).value = "");
         [1, 2, 3].forEach(i => {
             document.getElementById('prev-' + i).style.display = 'none';
             document.getElementById('prev-' + i).src = "";
         });
-        document.getElementById('dynamic-intake-fields').style.display = 'none';
     }
 
     function submitIntake() {
@@ -294,15 +254,20 @@
             btn.disabled = false;
             return;
         }
+
+        // FIX: Use Business Name if Personal Name is empty
+        const consignorName = document.getElementById('in_selected_name').value || document.getElementById('in_biz_hidden').value;
+
         const data = {
             consignorId: document.getElementById('in_cid').value,
-            name: document.getElementById('in_selected_name').value,
+            name: consignorName,
             phone: document.getElementById('in_phone_hidden').value,
             address: document.getElementById('in_addr_hidden').value,
             items: CART_ITEMS,
             user: CURRENT_USER ? CURRENT_USER.username : "Intake",
             auctionId: aucId
         };
+
         if (!data.name || data.items.length === 0) {
             showModal("Incomplete", "Enter Consignor and Items.");
             btn.innerText = originalText;
