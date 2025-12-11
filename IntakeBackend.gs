@@ -79,185 +79,58 @@ function addImagesToLot(lotId, newUrls) {
 }
 
 /* ==================================================
-   MODULAR RECEIPT GENERATION (FIXED)
+   HTML-BASED PDF RECEIPT GENERATION
    ================================================== */
 function createReceiptSheet(data) {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-    // 1. Fetch Templates
-    const tHeader = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_HEADER);
-    const tTabHead = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_TABLE_HEADER);
-    const tItem = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_ITEM);
-    const tFooter = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_FOOTER);
-    const tEnd = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_END);
-
-    if (!tHeader || !tTabHead || !tItem || !tFooter || !tEnd) {
-        throw new Error("Missing one or more Receipt Templates.");
-    }
-
-    // 2. Get Dimensions
-    const hRows = tHeader.getMaxRows();
-    const thRows = tTabHead.getMaxRows();
-    const iRows = tItem.getMaxRows();
-    const fRows = tFooter.getMaxRows();
-    const eRows = tEnd.getMaxRows();
-
-    // Find widest template to prevent column errors
-    const maxCols = Math.max(
-        tHeader.getMaxColumns(), tTabHead.getMaxColumns(), tItem.getMaxColumns(),
-        tFooter.getMaxColumns(), tEnd.getMaxColumns()
-    );
-
-    // Configuration for Page Size (Rows per Page)
-    const MAX_ROWS = 44;
-
-    // 3. Name Formatting Logic
-    let headerName = data.name || "";
-    if (data.business && data.business.trim() !== "") {
-        if (data.name && data.name.trim() !== "") {
-            headerName = `${data.business} / ${data.name}`;
-        } else {
-            headerName = data.business;
-        }
-    }
-
-    // 4. Page Simulation
-    let pages = [];
-    let currentPageItems = [];
-    let currentHeight = hRows + thRows;
-
-    // A. Place Items
-    data.items.forEach(item => {
-        if (currentHeight + iRows + fRows > MAX_ROWS) {
-            pages.push({ items: currentPageItems, hasEnd: false });
-            currentPageItems = [item];
-            currentHeight = hRows + thRows + iRows;
-        } else {
-            currentPageItems.push(item);
-            currentHeight += iRows;
-        }
-    });
-
-    // B. Place End Block
-    if (currentHeight + eRows + fRows <= MAX_ROWS) {
-        pages.push({ items: currentPageItems, hasEnd: true });
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Prepare Data for Template
+  let headerName = data.name || "";
+  if (data.business && data.business.trim() !== "") {
+    if (data.name && data.name.trim() !== "") {
+      headerName = `${data.business} / ${data.name}`;
     } else {
-        // If End block fits on new page with at least one item moved
-        if (currentPageItems.length > 0) {
-            const movedItem = currentPageItems.pop();
-            pages.push({ items: currentPageItems, hasEnd: false });
-            pages.push({ items: [movedItem], hasEnd: true });
-        } else {
-            pages.push({ items: currentPageItems, hasEnd: false });
-            pages.push({ items: [], hasEnd: true });
-        }
+      headerName = data.business;
     }
+  }
+  
+  // 2. Load HTML Template
+  const htmlTemplate = HtmlService.createTemplateFromFile('ReceiptTemplate');
+  
+  // 3. Inject Data
+  htmlTemplate.data = data;
+  htmlTemplate.headerName = headerName;
+  htmlTemplate.date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy");
+  
+  // 4. Generate PDF Blob
+  const htmlContent = htmlTemplate.evaluate().getContent();
+  const blob = Utilities.newBlob(htmlContent, 'text/html', 'Receipt_' + data.consignorId + '.html');
+  const pdfBlob = blob.getAs('application/pdf').setName(`Rcpt_${data.consignorId}_${new Date().getTime()}.pdf`);
 
-    // 5. Render
-    const timestamp = new Date().getTime();
-    const sheetName = `Rcpt_${data.consignorId}_${timestamp}`;
-    const newSheet = tHeader.copyTo(ss).setName(sheetName);
-    newSheet.clearContents();
-    newSheet.clearFormats();
+  // 5. Save to Drive
+  // Gets or creates the folder defined in Config
+  const folders = DriveApp.getFoldersByName(CONFIG.FOLDER_NAME);
+  const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(CONFIG.FOLDER_NAME);
+  
+  // Ensure folder is viewable so the user can open the link
+  folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  
+  const file = folder.createFile(pdfBlob);
+  const pdfUrl = file.getUrl(); // Or file.getDownloadUrl()
 
-    // FIX 1: Ensure columns exist
-    if (newSheet.getMaxColumns() < maxCols) {
-        newSheet.insertColumnsAfter(newSheet.getMaxColumns(), maxCols - newSheet.getMaxColumns());
-    }
+  // 6. Log to Database (DB_Receipts)
+  const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
+  if (dbRcpt) { 
+    dbRcpt.appendRow([
+      "RCPT-" + new Date().getTime(), 
+      data.consignorId, 
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"), 
+      pdfUrl, 
+      file.getName()
+    ]);
+  }
 
-    let writeRow = 1;
-    const totalPages = pages.length;
-
-    pages.forEach((page, index) => {
-        const pageNum = index + 1;
-
-        // --- A. HEADER ---
-        tHeader.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
-        newSheet.getRange(writeRow, 1).setValue(data.consignorId);
-        newSheet.getRange(writeRow, 7).setValue(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"));
-        newSheet.getRange(writeRow + 2, 1).setValue(headerName);
-        newSheet.getRange(writeRow + 2, 6).setValue(data.phone);
-        newSheet.getRange(writeRow + 4, 1).setValue(data.address);
-        writeRow += hRows;
-
-        // --- B. TABLE HEADER ---
-        tTabHead.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
-        writeRow += thRows;
-
-        // --- C. ITEMS ---
-        page.items.forEach(item => {
-            tItem.getDataRange().copyTo(newSheet.getRange(writeRow, 1));
-            // A1: Title
-            newSheet.getRange(writeRow, 1).setValue(item.title || "");
-            // B1: Inv ID
-            newSheet.getRange(writeRow, 2).setValue("#" + item.generatedId);
-            // C1: Desc
-            newSheet.getRange(writeRow, 3).setValue(item.desc || "");
-            // D1: VIN
-            const vinText = item.vin ? `VIN/SN: ${item.vin}` : "";
-            newSheet.getRange(writeRow, 4).setValue(vinText);
-            // E1: Reserve
-            if (item.reserve) newSheet.getRange(writeRow, 5).setValue(item.reserve);
-
-            writeRow += iRows;
-        });
-
-        // Calculate Footer Position
-        const pageStartRow = ((pageNum - 1) * MAX_ROWS) + 1;
-        const footerStartRow = pageStartRow + MAX_ROWS - fRows;
-
-        // FIX 2: Ensure rows exist before pasting Footer/End
-        // The footer ends at footerStartRow + fRows - 1. We need to make sure the sheet is that deep.
-        const neededRows = (footerStartRow + fRows) - newSheet.getMaxRows();
-        if (neededRows > 0) {
-            newSheet.insertRowsAfter(newSheet.getMaxRows(), neededRows);
-        }
-
-        // --- D. END BLOCK ---
-        if (page.hasEnd) {
-            const endBlockRow = footerStartRow - eRows;
-            tEnd.getDataRange().copyTo(newSheet.getRange(endBlockRow, 1));
-
-            // F4: Owner Name
-            newSheet.getRange(endBlockRow + 3, 6).setValue(data.signatureName);
-            // F7: Received By
-            newSheet.getRange(endBlockRow + 6, 6).setValue(data.user);
-
-            // A3: Signature Image
-            if (data.signatureImage) {
-                try {
-                    var base64 = data.signatureImage.split(',')[1];
-                    var decoded = Utilities.base64Decode(base64);
-                    var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
-                    var img = SpreadsheetApp.newCellImage().setSource(blob).build();
-                    newSheet.getRange(endBlockRow + 2, 1).setValue(img);
-                } catch (e) { console.error("Sig Error", e); }
-            }
-        }
-
-        // --- E. FOOTER ---
-        tFooter.getDataRange().copyTo(newSheet.getRange(footerStartRow, 1));
-        newSheet.getRange(footerStartRow, 7).setValue(`Page: ${pageNum} / ${totalPages}`);
-
-        writeRow = pageStartRow + MAX_ROWS;
-    });
-
-    SpreadsheetApp.flush();
-
-    const pdfUrl = "https://docs.google.com/spreadsheets/d/" + ss.getId() + "/export?format=pdf&gid=" + newSheet.getSheetId() + "&size=letter&portrait=true&fitw=true&gridlines=false&printtitle=false&sheetnames=false&pagenum=UNDEFINED&attachment=false";
-
-    const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
-    if (dbRcpt) {
-        dbRcpt.appendRow([
-            "RCPT-" + timestamp,
-            data.consignorId,
-            Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy"),
-            pdfUrl,
-            sheetName
-        ]);
-    }
-
-    return { url: pdfUrl, sheetName: sheetName };
+  return { url: pdfUrl, sheetName: "PDF_Generated" };
 }
 
 function createLabelSheet(lotIds) {
