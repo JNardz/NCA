@@ -16,26 +16,17 @@
     function initSignatureCanvas() {
         sigCanvas = document.getElementById('sig-canvas');
         const container = sigCanvas.parentElement;
-
-        // Set canvas resolution to match display size for sharpness and correct coordinates
         sigCanvas.width = container.offsetWidth;
         sigCanvas.height = container.offsetHeight;
-
         sigCtx = sigCanvas.getContext('2d');
-
-        // Reset Style
         sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
         sigCtx.strokeStyle = "#000";
         sigCtx.lineWidth = 2;
         sigCtx.lineJoin = "round";
-
-        // Mouse Events
         sigCanvas.onmousedown = function (e) { startDraw(e); };
         sigCanvas.onmousemove = function (e) { draw(e); };
         sigCanvas.onmouseup = function () { stopDraw(); };
         sigCanvas.onmouseout = function () { stopDraw(); };
-
-        // Touch Events
         sigCanvas.ontouchstart = function (e) { e.preventDefault(); startDraw(e.touches[0]); };
         sigCanvas.ontouchmove = function (e) { e.preventDefault(); draw(e.touches[0]); };
         sigCanvas.ontouchend = function () { stopDraw(); };
@@ -44,27 +35,19 @@
     function startDraw(e) {
         isDrawing = true;
         const rect = sigCanvas.getBoundingClientRect();
-
         sigCtx.beginPath();
-        // Since canvas width/height now match rect width/height, we don't need complex scaling
         sigCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
     }
 
     function draw(e) {
         if (!isDrawing) return;
         const rect = sigCanvas.getBoundingClientRect();
-
         sigCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
         sigCtx.stroke();
     }
 
-    function stopDraw() {
-        isDrawing = false;
-    }
-
-    function clearSignature() {
-        if (sigCtx && sigCanvas) sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
-    }
+    function stopDraw() { isDrawing = false; }
+    function clearSignature() { if (sigCtx && sigCanvas) sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height); }
 
     // --- MAIN LOGIC ---
 
@@ -109,11 +92,8 @@
         document.getElementById('in_addr_hidden').value = "";
         document.getElementById('consignor-results').style.display = 'none';
         document.getElementById('consignor-display-card').style.display = 'none';
-
-        // Reset Signature
         if (document.getElementById('sign_name_input')) document.getElementById('sign_name_input').value = "";
         clearSignature();
-
         CART_ITEMS = [];
         renderCart();
         clearCartForm();
@@ -122,51 +102,25 @@
 
     function goToStep1() {
         switchStep('rx-step-1');
-        updateBreadcrumbs([{
-            name: "Receiving",
-            func: "openReceiving()"
-        }, {
-            name: "Identify Consignor",
-            func: null
-        }]);
+        updateBreadcrumbs([{ name: "Receiving", func: "openReceiving()" }, { name: "Identify Consignor", func: null }]);
     }
 
     function goToStep2() {
         switchStep('rx-step-2');
-
-        // FORMAT HEADER: [ID] [BUSINESS] / [NAME]
         const name = document.getElementById('in_selected_name').value;
         const biz = document.getElementById('in_biz_hidden').value;
         const id = document.getElementById('in_cid').value;
-
         let display = "";
         if (biz && name) display = `${biz} / ${name}`;
         else display = biz || name;
-
-        document.getElementById('summ-con-name').innerHTML =
-            `Consignor: <span class="w3-tag w3-tiny w3-custom-accent" style="margin-right:5px">${id}</span><b>${display}</b>`;
-
-        updateBreadcrumbs([{
-            name: "Receiving",
-            func: "openReceiving()"
-        }, {
-            name: "Identify Consignor",
-            func: "goToStep1()"
-        }, {
-            name: "Build Inventory",
-            func: null
-        }]);
+        document.getElementById('summ-con-name').innerHTML = `Consignor: <span class="w3-tag w3-tiny w3-custom-accent" style="margin-right:5px">${id}</span><b>${display}</b>`;
+        updateBreadcrumbs([{ name: "Receiving", func: "openReceiving()" }, { name: "Identify Consignor", func: "goToStep1()" }, { name: "Build Inventory", func: null }]);
     }
 
     function switchStep(stepId) {
         document.querySelectorAll('.intake-step').forEach(el => el.classList.remove('active'));
         document.getElementById(stepId).classList.add('active');
-
-        // Init canvas if entering step 3
-        if (stepId === 'rx-step-3') {
-            // Slight delay to allow DOM to render and get correct dimensions
-            setTimeout(initSignatureCanvas, 100);
-        }
+        if (stepId === 'rx-step-3') { setTimeout(initSignatureCanvas, 100); }
     }
 
     function filterConsignors() {
@@ -196,20 +150,13 @@
         list.forEach(c => {
             const div = document.createElement('div');
             div.className = "result-row";
-            div.onclick = () => {
-                selectConsignor(c);
-            };
-
-            // Logic for Name Display
+            div.onclick = () => { selectConsignor(c); };
             let dispName = c.name;
             if (c.business) {
                 if (c.name) dispName = `${c.business} / ${c.name}`;
                 else dispName = c.business;
             }
-
-            // ID Badge moved to left
             const idBadge = `<span class="w3-tag w3-tiny w3-text-custom-accent" style="margin-right:8px">${c.id}</span>`;
-
             div.innerHTML = `<div class="result-main">${idBadge}${dispName}</div><div class="result-sub">${c.phone} | ${c.address}</div>`;
             container.appendChild(div);
         });
@@ -218,7 +165,7 @@
     function selectConsignor(c) {
         document.getElementById('in_cid').value = c.id;
         document.getElementById('in_selected_name').value = c.name;
-        document.getElementById('in_biz_hidden').value = c.business || ""; // Store Biz Name
+        document.getElementById('in_biz_hidden').value = c.business || "";
         document.getElementById('in_phone_hidden').value = c.phone;
         document.getElementById('in_addr_hidden').value = c.address;
         document.getElementById('disp_c_id').innerText = c.id;
@@ -289,7 +236,6 @@
         }
         CART_ITEMS.forEach((item, idx) => {
             const fullTitle = getLotTitle(item);
-            // Thumbnails removed
             const div = document.createElement('div');
             div.className = `cart-item`;
             div.innerHTML = `<div style="display:flex;align-items:center"><div><div style="font-weight:bold">${fullTitle}</div><small class="w3-text-grey">${item.notes || ""}</small></div></div><div class="cart-actions"><i class="fa fa-trash cart-del" onclick="removeCartItem(${idx})"></i></div>`;
@@ -325,9 +271,9 @@
             return;
         }
 
-        // FIX: Use Business Name if Personal Name is empty
         const consignorName = document.getElementById('in_selected_name').value || document.getElementById('in_biz_hidden').value;
 
+        // UPDATED: Added business, phone, and address to payload explicitly
         const data = {
             consignorId: document.getElementById('in_cid').value,
             name: consignorName,
@@ -369,22 +315,16 @@
     }
 
     function printReceipt() {
-        // Validation: Ensure signature and name are provided
         const signName = document.getElementById('sign_name_input').value;
         if (!signName) {
             showModal("Signature Required", "Please enter the printed name of the signer.");
             return;
         }
-
-        // Get signature image data
         let sigData = null;
         if (sigCanvas) {
             sigData = sigCanvas.toDataURL("image/png");
         }
-
         if (!LAST_INTAKE_DATA) return;
-
-        // Add signature data to the object
         LAST_INTAKE_DATA.signatureName = signName;
         LAST_INTAKE_DATA.signatureImage = sigData;
 
