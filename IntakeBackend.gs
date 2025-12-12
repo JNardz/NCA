@@ -182,9 +182,9 @@ function createReceiptSheet(data) {
           var decoded = Utilities.base64Decode(base64);
           var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
           
-          // Use insertImage (Floating) instead of CellImage for better PDF support
-          // Col 4 = D, Row 36
-          var sigImg = newSheet.insertImage(blob, 4, 36);
+          // UPDATED: Added offset (0, 20) to push image down 20 pixels
+          // insertImage(blob, column, row, offsetX, offsetY)
+          var sigImg = newSheet.insertImage(blob, 4, 36, 0, 20);
           
           // Resize to fit signature line nicely (approx 250px width, 60px height)
           sigImg.setWidth(250).setHeight(60);
