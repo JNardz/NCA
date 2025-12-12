@@ -84,14 +84,16 @@ function addImagesToLot(lotId, newUrls) {
 function createReceiptSheet(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const template = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_RECEIPT);
+  // NEW: Get the source of the images
+  const imgSourceSheet = ss.getSheetByName(CONFIG.SHEETS.TEMPLATE_IMAGES); // "IMAGES_TO_USE"
   
   if (!template) throw new Error("Template sheet '" + CONFIG.SHEETS.TEMPLATE_RECEIPT + "' is missing.");
+  if (!imgSourceSheet) throw new Error("Image Source sheet '" + CONFIG.SHEETS.TEMPLATE_IMAGES + "' is missing.");
 
   // 1. Prepare Data
   const timestamp = new Date().getTime();
   const currentDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy");
   
-  // LOGIC FIX: Check if Name is the same as Business to avoid "ACME/ACME"
   let headerName = data.name || "";
   if (data.business && data.business.trim() !== "") {
     if (data.name && data.name.trim() !== "" && data.name !== data.business) {
@@ -101,7 +103,6 @@ function createReceiptSheet(data) {
     }
   }
 
-  // Define Rows for Items
   const ITEM_ROWS = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32];
   const ITEMS_PER_PAGE = ITEM_ROWS.length; // 13 items
 
@@ -111,29 +112,26 @@ function createReceiptSheet(data) {
   for (let i = 0; i < items.length; i += ITEMS_PER_PAGE) {
     pages.push(items.slice(i, i + ITEMS_PER_PAGE));
   }
-  if (pages.length === 0) pages.push([]); // Ensure at least one page if no items
+  if (pages.length === 0) pages.push([]); 
 
-  // 3. Create Temporary Spreadsheet for PDF generation
+  // 3. Create Temporary Spreadsheet
   const tempSpreadsheet = SpreadsheetApp.create("Temp_Receipt_" + data.consignorId);
   const tempId = tempSpreadsheet.getId();
   
   try {
+    // NEW: Copy the Image Source sheet to the temp spreadsheet so we can use copyTo()
+    const tempImgSheet = imgSourceSheet.copyTo(tempSpreadsheet).setName("Temp_Images_Source");
+
     pages.forEach((pageItems, pageIndex) => {
-      // Copy Template to Temp Spreadsheet
       const sheetName = `Page_${pageIndex + 1}`;
       const newSheet = template.copyTo(tempSpreadsheet).setName(sheetName);
       
-      // HIDE GRIDLINES (Visual)
       newSheet.setHiddenGridlines(true);
 
-      // --- HEADER (All Pages) ---
-      // B2: Consignor ID
+      // --- HEADER ---
       newSheet.getRange("B2").setValue("C-" + data.consignorId);
-      
-      // B3: Name
       newSheet.getRange("B3").setValue(headerName);
       
-      // B4/B5: Address/Phone Logic
       if (data.address && data.address.trim() !== "") {
         newSheet.getRange("B4").setValue(data.address);
         newSheet.getRange("B5").setValue(data.phone || "");
@@ -142,81 +140,89 @@ function createReceiptSheet(data) {
         newSheet.getRange("B5").clearContent();
       }
       
-      // E5: Date
       newSheet.getRange("E5").setValue(currentDate);
 
-      // --- ITEMS (All Pages) ---
+      // --- ITEMS ---
       ITEM_ROWS.forEach((r, idx) => {
         const item = pageItems[idx];
         if (item) {
-          // A: Title, B: Inv ID, C: Item Name, D: VIN, E: Reserve
-          newSheet.getRange(r, 1).setValue(item.title || "");
+          // A: Title - NOW IMAGE LOGIC
+          // Clear text first
+          newSheet.getRange(r, 1).clearContent();
+          
+          let sourceRange = null;
+          // Mapping: Here->A1, Copy->A2, Salvage->A3, Missing->A4
+          if (item.title === "Here") sourceRange = tempImgSheet.getRange("A1");
+          else if (item.title === "Copy") sourceRange = tempImgSheet.getRange("A2");
+          else if (item.title === "Salvage") sourceRange = tempImgSheet.getRange("A3");
+          else if (item.title === "Missing") sourceRange = tempImgSheet.getRange("A4");
+          
+          if (sourceRange) {
+             // Copy image/cell from temp source to receipt cell
+             sourceRange.copyTo(newSheet.getRange(r, 1));
+          } else {
+             // N/A or others: leave blank
+             newSheet.getRange(r, 1).clearContent();
+          }
+
+          // B: Inv ID
           newSheet.getRange(r, 2).setValue("#" + item.generatedId);
+          // C: Item Name
           newSheet.getRange(r, 3).setValue(item.desc || "");
+          // D: VIN
           newSheet.getRange(r, 4).setValue(item.vin || ""); 
+          // E: Reserve
           newSheet.getRange(r, 5).setValue(item.reserve || "");
         } else {
           // Clear unused row and the row below it
           newSheet.getRange(r, 1, 1, 5).clearContent();     
-          // Safety check for dimensions
           if (r + 1 <= newSheet.getMaxRows()) {
              newSheet.getRange(r + 1, 1, 1, 5).clearContent(); 
           }
         }
       });
 
-      // --- FOOTER & SIGNATURE (All Pages) ---
-      // A38: Logged in User
+      // --- FOOTER & SIGNATURE ---
       newSheet.getRange("A38").setValue(data.user || "");
-      
-      // C38: Owner/Agent Name
       newSheet.getRange("C38").setValue(data.signatureName || "");
       
-      // D36: Signature Image
-      // Clear content first to avoid overlapping with placeholder text
       newSheet.getRange("D36").clearContent();
-
       if (data.signatureImage) {
         try {
           var base64 = data.signatureImage.split(',')[1];
           var decoded = Utilities.base64Decode(base64);
           var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
-          
-          // UPDATED: Added offset (0, 20) to push image down 20 pixels
-          // insertImage(blob, column, row, offsetX, offsetY)
           var sigImg = newSheet.insertImage(blob, 4, 36, 0, 20);
-          
-          // Resize to fit signature line nicely (approx 250px width, 60px height)
           sigImg.setWidth(250).setHeight(60);
-          
         } catch (e) {
           console.error("Sig Error", e);
         }
       }
 
-      // E41: Page Numbering
       newSheet.getRange("E41").setValue(`Page ${pageIndex + 1}/${pages.length}`);
     });
 
-    // Remove the default "Sheet1"
     const defaultSheet = tempSpreadsheet.getSheetByName("Sheet1");
     if (defaultSheet) tempSpreadsheet.deleteSheet(defaultSheet);
+    
+    // Cleanup the temp image source sheet before printing
+    const tempImgSheetRef = tempSpreadsheet.getSheetByName("Temp_Images_Source");
+    if (tempImgSheetRef) tempSpreadsheet.deleteSheet(tempImgSheetRef);
 
     SpreadsheetApp.flush();
 
-    // 4. Export PDF using URL Fetch 
-    // This allows us to enforce 'gridlines=false' and custom margins
+    // 4. Export PDF
     const exportUrl = "https://docs.google.com/spreadsheets/d/" + tempId + 
       "/export?format=pdf" +
       "&size=letter" +
       "&portrait=true" +
-      "&scale=4" +           // 4 = Fit to Page
-      "&gridlines=false" +   // HIDE Gridlines in PDF
+      "&scale=4" +           
+      "&gridlines=false" +   
       "&printtitle=false" +
       "&sheetnames=false" +
       "&pagenum=UNDEFINED" +
       "&attachment=false" +
-      "&top_margin=0.25" +   // Narrow Margins
+      "&top_margin=0.25" +   
       "&bottom_margin=0.25" +
       "&left_margin=0.25" +
       "&right_margin=0.25";
@@ -233,10 +239,8 @@ function createReceiptSheet(data) {
     const file = folder.createFile(pdfBlob);
     const pdfUrl = file.getUrl();
 
-    // 6. Cleanup Temp Sheet
     DriveApp.getFileById(tempId).setTrashed(true);
 
-    // 7. Log to DB
     const dbRcpt = ss.getSheetByName(CONFIG.SHEETS.DB_RCPT);
     if (dbRcpt) { 
       dbRcpt.appendRow([
@@ -251,14 +255,12 @@ function createReceiptSheet(data) {
     return { url: pdfUrl, sheetName: "PDF" };
 
   } catch (e) {
-    // Attempt to trash temp file if error occurs
     try { DriveApp.getFileById(tempId).setTrashed(true); } catch(x) {}
     throw e;
   }
 }
 
 function deleteReceiptSheet(sheetName) { 
-  // No-op for main sheet as we used a temp file
   return "Cleaned up";
 }
 
