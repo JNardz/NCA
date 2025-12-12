@@ -6,15 +6,15 @@ const CONFIG = {
     DB_AUC: "DB_Auctions",
     DB_USERS: "DB_Users",
     
-    // The Master Template for the new Receipt Format
     TEMPLATE_RECEIPT: "Merch_Receipt_Template",
+    TEMPLATE_IMAGES: "IMAGES_TO_USE", // New Sheet Definition
     
     TEMPLATE_LABEL: "Template_Label_Inventory" 
   },
   
   FOLDER_NAME: "Auction_Intake_Images",
   
-  // Label Configuration (Legacy/Standard)
+  // ... rest of existing config ...
   LABEL: {
     CELL_HEADER: "B1", 
     CELL_CON: "A4",    
@@ -22,16 +22,6 @@ const CONFIG = {
     CELL_BARCODE: "C5",
     CELL_ITEM_NAME: "A5",
     CELL_VIN: "C6" 
-  },
-
-  // Legacy Receipt Config (Kept for reference, but overridden by new logic)
-  RECEIPT: {
-    CELL_NUM: "A1", CELL_DATE: "G1", CELL_NAME: "A3", CELL_PHONE: "F3", CELL_ADDR: "A5",
-    START_ROW: 8, MAX_ROW: 42,
-    COL_DESC: 1, COL_NOTES: 6, COL_RESERVE: 7, COL_TITLE: 8,
-    CELL_SIGN_NAME: "A50",
-    CELL_SIGN_IMAGE_ROW: 53,
-    CELL_SIGN_IMAGE_COL: 1 
   },
 
   LOT_TYPES: {
