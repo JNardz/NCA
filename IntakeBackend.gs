@@ -91,15 +91,12 @@ function createReceiptSheet(data) {
   const timestamp = new Date().getTime();
   const currentDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "MM/dd/yyyy");
   
-  // LOGIC FIX: Name Formatting
-  // If Business exists, check if 'name' is just a copy of 'business' (which happens if personal name was blank)
+  // LOGIC FIX: Check if Name is the same as Business to avoid "ACME/ACME"
   let headerName = data.name || "";
   if (data.business && data.business.trim() !== "") {
     if (data.name && data.name.trim() !== "" && data.name !== data.business) {
-      // Both exist and are different -> "[BUSINESS]/[NAME]"
       headerName = `${data.business}/${data.name}`;
     } else {
-      // Only business exists, or name is duplicate of business -> "[BUSINESS]"
       headerName = data.business;
     }
   }
@@ -126,8 +123,11 @@ function createReceiptSheet(data) {
       const sheetName = `Page_${pageIndex + 1}`;
       const newSheet = template.copyTo(tempSpreadsheet).setName(sheetName);
       
+      // HIDE GRIDLINES (Visual)
+      newSheet.setHiddenGridlines(true);
+
       // --- HEADER (All Pages) ---
-      // B2: Consignor ID "C-[ID]"
+      // B2: Consignor ID
       newSheet.getRange("B2").setValue("C-" + data.consignorId);
       
       // B3: Name
@@ -149,22 +149,16 @@ function createReceiptSheet(data) {
       ITEM_ROWS.forEach((r, idx) => {
         const item = pageItems[idx];
         if (item) {
-          // A: Title
+          // A: Title, B: Inv ID, C: Item Name, D: VIN, E: Reserve
           newSheet.getRange(r, 1).setValue(item.title || "");
-          // B: Inv ID
           newSheet.getRange(r, 2).setValue("#" + item.generatedId);
-          // C: Item Name
           newSheet.getRange(r, 3).setValue(item.desc || "");
-          // D: VIN/SN
           newSheet.getRange(r, 4).setValue(item.vin || ""); 
-          // E: Reserve
           newSheet.getRange(r, 5).setValue(item.reserve || "");
         } else {
-          // Clear unused row AND the row below it (spacer/notes)
-          // Rows are 1-indexed. getRange(row, col, numRows, numCols)
-          // Clearing Col A to E (5 columns)
-          newSheet.getRange(r, 1, 1, 5).clearContent();     // Clear Item Row
-          newSheet.getRange(r + 1, 1, 1, 5).clearContent(); // Clear Row Below
+          // Clear unused row and the row below it
+          newSheet.getRange(r, 1, 1, 5).clearContent();     
+          newSheet.getRange(r + 1, 1, 1, 5).clearContent(); 
         }
       });
 
@@ -175,11 +169,7 @@ function createReceiptSheet(data) {
       // C38: Owner/Agent Name
       newSheet.getRange("C38").setValue(data.signatureName || "");
       
-      // D36: Signature Image (Last Page Only logic removed per request to have on every page, 
-      // BUT typically signatures are only needed once. 
-      // However, prompt said "signatures and consignor data on every page".
-      // We will place it on every page.)
-      
+      // D36: Signature Image
       if (data.signatureImage) {
         try {
           var base64 = data.signatureImage.split(',')[1];
@@ -192,20 +182,36 @@ function createReceiptSheet(data) {
         }
       }
 
-      // LOGIC ADDITION: Page Numbering in Cell E41
+      // E41: Page Numbering
       newSheet.getRange("E41").setValue(`Page ${pageIndex + 1}/${pages.length}`);
     });
 
-    // Remove the default "Sheet1" from temp spreadsheet so it doesn't print
+    // Remove the default "Sheet1"
     const defaultSheet = tempSpreadsheet.getSheetByName("Sheet1");
     if (defaultSheet) tempSpreadsheet.deleteSheet(defaultSheet);
 
     SpreadsheetApp.flush();
 
-    // 4. Export PDF
-    const pdfBlob = DriveApp.getFileById(tempId).getAs('application/pdf');
-    const pdfName = `Rcpt_${data.consignorId}_${timestamp}.pdf`;
-    pdfBlob.setName(pdfName);
+    // 4. Export PDF using URL Fetch 
+    // This allows us to enforce 'gridlines=false' and custom margins
+    const exportUrl = "https://docs.google.com/spreadsheets/d/" + tempId + 
+      "/export?format=pdf" +
+      "&size=letter" +
+      "&portrait=true" +
+      "&scale=4" +           // 4 = Fit to Page
+      "&gridlines=false" +   // HIDE Gridlines in PDF
+      "&printtitle=false" +
+      "&sheetnames=false" +
+      "&pagenum=UNDEFINED" +
+      "&attachment=false" +
+      "&top_margin=0.25" +   // Narrow Margins
+      "&bottom_margin=0.25" +
+      "&left_margin=0.25" +
+      "&right_margin=0.25";
+
+    const pdfBlob = UrlFetchApp.fetch(exportUrl, {
+      headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() }
+    }).getBlob().setName(`Rcpt_${data.consignorId}_${timestamp}.pdf`);
 
     // 5. Save to Drive
     const folders = DriveApp.getFoldersByName(CONFIG.FOLDER_NAME);
@@ -226,7 +232,7 @@ function createReceiptSheet(data) {
         data.consignorId, 
         currentDate, 
         pdfUrl, 
-        pdfName
+        file.getName()
       ]);
     }
 
@@ -252,7 +258,6 @@ function uploadIntakeImage(data) {
     const bytes = Utilities.base64Decode(data.substr(data.indexOf('base64,') + 7));
     const blob = Utilities.newBlob(bytes, data.substring(5, data.indexOf(';')), "intake_" + new Date().getTime() + ".jpg"); 
     const file = folder.createFile(blob);
-    // Return View URL
     return "https://drive.google.com/uc?export=view&id=" + file.getId(); 
   } catch (e) { return "ERROR: " + e.toString();
   } 
