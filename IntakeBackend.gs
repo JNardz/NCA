@@ -158,7 +158,10 @@ function createReceiptSheet(data) {
         } else {
           // Clear unused row and the row below it
           newSheet.getRange(r, 1, 1, 5).clearContent();     
-          newSheet.getRange(r + 1, 1, 1, 5).clearContent(); 
+          // Safety check for dimensions
+          if (r + 1 <= newSheet.getMaxRows()) {
+             newSheet.getRange(r + 1, 1, 1, 5).clearContent(); 
+          }
         }
       });
 
@@ -170,13 +173,22 @@ function createReceiptSheet(data) {
       newSheet.getRange("C38").setValue(data.signatureName || "");
       
       // D36: Signature Image
+      // Clear content first to avoid overlapping with placeholder text
+      newSheet.getRange("D36").clearContent();
+
       if (data.signatureImage) {
         try {
           var base64 = data.signatureImage.split(',')[1];
           var decoded = Utilities.base64Decode(base64);
           var blob = Utilities.newBlob(decoded, 'image/png', 'signature.png');
-          var img = SpreadsheetApp.newCellImage().setSource(blob).build();
-          newSheet.getRange("D36").setValue(img);
+          
+          // Use insertImage (Floating) instead of CellImage for better PDF support
+          // Col 4 = D, Row 36
+          var sigImg = newSheet.insertImage(blob, 4, 36);
+          
+          // Resize to fit signature line nicely (approx 250px width, 60px height)
+          sigImg.setWidth(250).setHeight(60);
+          
         } catch (e) {
           console.error("Sig Error", e);
         }
