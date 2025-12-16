@@ -470,4 +470,50 @@
         reader.readAsDataURL(file);
         document.getElementById('upload-input').value = "";
     }
+
+/* --- VIN SCANNING LOGIC --- */
+    function startVinScanner() {
+        // Reuse the overlay defined in index.html
+        document.getElementById('scanner-overlay').style.display = 'flex';
+
+        // Use a timeout to ensure DOM is ready
+        setTimeout(() => {
+            // We reuse the global 'html5QrcodeScanner' variable so the existing stopScanner() works
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", {
+                fps: 10,
+                qrbox: { width: 250, height: 250 }
+            }, false);
+
+            // Pass our specific success callback
+            html5QrcodeScanner.render(onVinScanSuccess, (err) => { 
+                // Ignore errors during scanning
+            });
+        }, 100);
+    }
+
+    function onVinScanSuccess(decodedText, decodedResult) {
+        // 1. Stop the scanner (uses the global stopScanner from LotManagement or index)
+        stopScanner();
+
+        // 2. Populate VIN field
+        const vinInput = document.getElementById('cart_vin');
+        vinInput.value = decodedText;
+
+        // 3. Decode the VIN
+        const descInput = document.getElementById('cart_desc');
+        const originalPlaceholder = descInput.placeholder;
+        descInput.value = "";
+        descInput.placeholder = "Decoding VIN... Please wait...";
+        
+        google.script.run.withSuccessHandler(info => {
+            if (info) {
+                descInput.value = info; // e.g., "2015 Ford F-150"
+                descInput.placeholder = originalPlaceholder;
+                // Optional: Auto-fill year/make/model if you break them out later
+            } else {
+                descInput.placeholder = "Could not decode. Enter manually.";
+            }
+        }).decodeVin(decodedText);
+    }
+    
 </script>
