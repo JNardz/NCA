@@ -276,3 +276,38 @@ function uploadIntakeImage(data) {
   } catch (e) { return "ERROR: " + e.toString();
   } 
 }
+
+/* ==================================================
+   VIN DECODING (NHTSA API)
+   ================================================== */
+function decodeVin(vin) {
+  if (!vin || vin.length < 11) return null;
+  
+  try {
+    // Use NHTSA Public API
+    const url = `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${vin}?format=json`;
+    const response = UrlFetchApp.fetch(url);
+    const json = JSON.parse(response.getContentText());
+    
+    if (json.Results) {
+      const getVal = (key) => {
+        const item = json.Results.find(r => r.Variable === key);
+        return item ? item.Value : "";
+      };
+
+      const year = getVal("Model Year");
+      const make = getVal("Make");
+      const model = getVal("Model");
+      
+      // Combine into a description string
+      if (year && make && model) {
+        return `${year} ${make} ${model}`;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error("VIN Decode Error", e);
+    return null; // Return null on failure so frontend handles it
+  }
+}
+
